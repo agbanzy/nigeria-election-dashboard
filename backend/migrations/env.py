@@ -43,6 +43,21 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
+        # Postgres 15 removed the default PUBLIC CREATE on the public schema.
+        # DO managed PG dev tier hands us a database-owner role; that owner has
+        # implicit rights via pg_database_owner, but we still need to explicitly
+        # grant ourselves CREATE so Alembic can build alembic_version.
+        # Failure is non-fatal: the migration will surface a clearer error if
+        # privileges genuinely can't be obtained.
+        from sqlalchemy import text as _text
+
+        try:
+            connection.execute(_text("CREATE SCHEMA IF NOT EXISTS public"))
+            connection.execute(_text("GRANT ALL ON SCHEMA public TO CURRENT_USER"))
+            connection.commit()
+        except Exception:
+            connection.rollback()
+
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()
