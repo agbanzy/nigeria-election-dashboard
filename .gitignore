@@ -21,8 +21,11 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Claude
-.claude/
+# Claude — keep multi-chat state files committed; ignore everything else
+.claude/*
+!.claude/state/
+!.claude/state/**
+
 collation-portal/
 fct_elections.db
 polling_agents_*.csv

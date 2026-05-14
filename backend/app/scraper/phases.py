@@ -1,0 +1,215 @@
+"""Scraper phases. Each runs against one (state, election) at a time and is
+re-entrant — running twice is a no-op if data hasn't changed.
+
+Phase 1 — stats: total PUs, results uploaded
+Phase 2 — lga/ward structure
+Phase 3 — polling unit detail + result raw_json
+
+Persists into the new unified schema (`elections`, `lgas`, `wards`,
+`polling_units`, `election_results`).
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import date
+from typing import Any
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import Election, IngestionSource, Lga, PollingUnit, ScrapeLog, Ward
+from app.scraper.irev_client import IrevClient
+
+log = logging.getLogger(__name__)
+
+LIVE_SOURCE_NAME = "irev_live"
+BACKFILL_SOURCE_NAME = "irev_backfill"
+
+
+def ensure_source(session: Session, name: str) -> IngestionSource:
+    src = session.scalar(select(IngestionSource).where(IngestionSource.name == name))
+    if src:
+        return src
+    src = IngestionSource(name=name, url="https://www.inecelectionresults.ng/", license="public")
+    session.add(src)
+    session.flush()
+    return src
+
+
+def ensure_election(
+    session: Session,
+    *,
+    cycle: int,
+    election_type: str,
+    state_id: int | None,
+    irev_election_id: str | None,
+    election_date: date | None,
+    status: str,
+) -> Election:
+    stmt = select(Election).where(
+        Election.cycle == cycle,
+        Election.election_type == election_type,
+        Election.state_id == state_id,
+    )
+    existing = session.scalar(stmt)
+    if existing:
+        if irev_election_id and not existing.irev_election_id:
+            existing.irev_election_id = irev_election_id
+        if election_date and not existing.election_date:
+            existing.election_date = election_date
+        existing.status = status
+        return existing
+    elec = Election(
+        cycle=cycle,
+        election_type=election_type,
+        state_id=state_id,
+        irev_election_id=irev_election_id,
+        election_date=election_date,
+        status=status,
+    )
+    session.add(elec)
+    session.flush()
+    return elec
+
+
+def upsert_lga(session: Session, state_id: int, *, irev_lga_id: int | None, name: str) -> Lga:
+    if irev_lga_id is not None:
+        existing = session.scalar(
+            select(Lga).where(Lga.state_id == state_id, Lga.irev_lga_id == irev_lga_id)
+        )
+        if existing:
+            return existing
+    existing_by_name = session.scalar(
+        select(Lga).where(Lga.state_id == state_id, Lga.name == name)
+    )
+    if existing_by_name:
+        if irev_lga_id and not existing_by_name.irev_lga_id:
+            existing_by_name.irev_lga_id = irev_lga_id
+        return existing_by_name
+    lga = Lga(state_id=state_id, irev_lga_id=irev_lga_id, name=name)
+    session.add(lga)
+    session.flush()
+    return lga
+
+
+def upsert_ward(session: Session, lga: Lga, *, irev_ward_id: int | None, name: str) -> Ward:
+    if irev_ward_id is not None:
+        existing = session.scalar(
+            select(Ward).where(Ward.lga_id == lga.lga_id, Ward.irev_ward_id == irev_ward_id)
+        )
+        if existing:
+            return existing
+    existing_by_name = session.scalar(
+        select(Ward).where(Ward.lga_id == lga.lga_id, Ward.name == name)
+    )
+    if existing_by_name:
+        if irev_ward_id and not existing_by_name.irev_ward_id:
+            existing_by_name.irev_ward_id = irev_ward_id
+        return existing_by_name
+    ward = Ward(lga_id=lga.lga_id, irev_ward_id=irev_ward_id, name=name)
+    session.add(ward)
+    session.flush()
+    return ward
+
+
+def upsert_polling_unit(
+    session: Session,
+    ward: Ward,
+    *,
+    irev_pu_id: int | None,
+    pu_code: str | None,
+    name: str | None,
+) -> PollingUnit:
+    if irev_pu_id is not None:
+        existing = session.scalar(
+            select(PollingUnit).where(
+                PollingUnit.ward_id == ward.ward_id, PollingUnit.irev_pu_id == irev_pu_id
+            )
+        )
+        if existing:
+            return existing
+    if pu_code:
+        existing_by_code = session.scalar(
+            select(PollingUnit).where(
+                PollingUnit.ward_id == ward.ward_id, PollingUnit.pu_code == pu_code
+            )
+        )
+        if existing_by_code:
+            if irev_pu_id and not existing_by_code.irev_pu_id:
+                existing_by_code.irev_pu_id = irev_pu_id
+            return existing_by_code
+    pu = PollingUnit(ward_id=ward.ward_id, irev_pu_id=irev_pu_id, pu_code=pu_code, name=name)
+    session.add(pu)
+    session.flush()
+    return pu
+
+
+def log_phase(
+    session: Session,
+    *,
+    phase: str,
+    state_id: int | None,
+    election_id: int | None,
+    status: str,
+    message: str | None = None,
+    duration_ms: int | None = None,
+) -> None:
+    session.add(
+        ScrapeLog(
+            phase=phase,
+            state_id=state_id,
+            election_id=election_id,
+            status=status,
+            message=message,
+            duration_ms=duration_ms,
+        )
+    )
+
+
+def scrape_lga_structure(
+    client: IrevClient,
+    session: Session,
+    *,
+    election: Election,
+    state_id: int,
+) -> int:
+    """Phase 2 — fetch the LGA/ward structure for one election/state.
+
+    Returns number of LGAs ingested.
+    """
+    if not election.irev_election_id:
+        return 0
+    data = client.lga_state(election.irev_election_id, state_id) or []
+    count = 0
+    for lga_raw in data:
+        if not isinstance(lga_raw, dict):
+            continue
+        lga_name = lga_raw.get("lga_name") or lga_raw.get("name")
+        irev_lga_id = lga_raw.get("lga_id") or lga_raw.get("_id")
+        if not lga_name:
+            continue
+        lga = upsert_lga(session, state_id, irev_lga_id=_as_int(irev_lga_id), name=lga_name)
+        for ward_raw in lga_raw.get("wards") or []:
+            if not isinstance(ward_raw, dict):
+                continue
+            ward_name = ward_raw.get("ward_name") or ward_raw.get("name")
+            if not ward_name:
+                continue
+            upsert_ward(
+                session,
+                lga,
+                irev_ward_id=_as_int(ward_raw.get("ward_id") or ward_raw.get("_id")),
+                name=ward_name,
+            )
+        count += 1
+    return count
+
+
+def _as_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

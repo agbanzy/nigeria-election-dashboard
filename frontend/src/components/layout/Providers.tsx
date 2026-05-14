@@ -1,7 +1,10 @@
 "use client";
 
+import { Suspense } from "react";
+
 import { DashboardProvider, useDashboard } from "@/context/DashboardContext";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { FilterProvider } from "@/context/FilterContext";
 import ErrorBoundary from "@/components/shared/ErrorBoundary";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
@@ -14,12 +17,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   useKeyboardShortcuts();
 
   return (
-    <div
-      className={cn(
-        "flex h-screen overflow-hidden",
-        isFullscreen && "tv-mode"
-      )}
-    >
+    <div className={cn("flex h-screen overflow-hidden", isFullscreen && "tv-mode")}>
       {!isFullscreen && <Sidebar />}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <ConnectionBanner isOnline={isOnline} sseConnected={sseConnected} />
@@ -40,7 +38,12 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider>
       <DashboardProvider>
-        <DashboardShell>{children}</DashboardShell>
+        {/* FilterProvider uses useSearchParams which requires Suspense in App Router */}
+        <Suspense fallback={null}>
+          <FilterProvider>
+            <DashboardShell>{children}</DashboardShell>
+          </FilterProvider>
+        </Suspense>
       </DashboardProvider>
     </ThemeProvider>
   );
