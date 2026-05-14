@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Providers from "@/components/layout/Providers";
+import { BRAND_NAME, BRAND_TAGLINE } from "@/lib/branding";
 
 export const metadata: Metadata = {
-  title: "FCT 2026 Elections - Live Dashboard",
-  description:
-    "Real-time election results monitoring dashboard for FCT Area Council Elections",
+  title: BRAND_NAME,
+  description: BRAND_TAGLINE,
 };
 
 export default function RootLayout({
