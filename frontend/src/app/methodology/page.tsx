@@ -91,7 +91,7 @@ export default function MethodologyPage() {
         <p>
           Powered by{" "}
           <a
-            href="https://innoedge.tech"
+            href="https://innoedgetech.com/"
             target="_blank"
             rel="noopener noreferrer"
             className="font-bold text-accent-green underline"
