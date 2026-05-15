@@ -13,7 +13,7 @@ export const METHODOLOGY_HREF = "/methodology";
 
 // Innoedge attribution
 export const POWERED_BY = "Innoedge";
-export const POWERED_BY_URL = "https://innoedge.tech";
+export const POWERED_BY_URL = "https://innoedgetech.com/";
 export const POWERED_BY_TAGLINE = "Innoedge Technologies Ltd";
 
 export interface BrandScope {
