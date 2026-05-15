@@ -1,8 +1,17 @@
-"""Thin HTTP client for the INEC IReV proxy.
+"""Thin HTTP client for the INEC IReV API.
+
+Backend: `https://dolphin-app-sleqh.ondigitalocean.app/api/v1/` — this is INEC's
+own DO-hosted API (not a third-party proxy). Verified by inspecting the official
+SPA at https://www.inecelectionresults.ng — its main.js bundle references the
+same host, the same `x-api-key` value, and a sibling base at
+`https://lv001-r.inecelectionresults.ng/api/v1/`.
+
+The "API key" is INEC's PUBLIC client key, shipped in the SPA bundle. It is not
+a secret. Empirically the server doesn't even enforce it — calls succeed
+without the header — but we send it for compatibility / future-proofing in case
+INEC starts enforcing.
 
 Retries on 429/5xx with backoff. Token bucket caps to 30 req/min.
-Identity headers mirror the legacy `election_dashboard.py` (line ~95) so the proxy
-won't fingerprint us as a new client.
 """
 
 from __future__ import annotations
@@ -17,6 +26,11 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 log = logging.getLogger(__name__)
+
+# INEC's PUBLIC Angular client key, baked into their SPA bundle. Not a secret —
+# served to every browser that opens inecelectionresults.ng. Empirically the
+# server does not enforce it; sent for compatibility.
+PUBLIC_INEC_CLIENT_KEY = "4SXkHM7Amb1SbF4C8do6816dmbbwqPp7akRbrmcV"
 
 _DEFAULT_HEADERS = {
     "User-Agent": (
@@ -56,9 +70,17 @@ class TokenBucket:
 
 
 class IrevClient:
-    def __init__(self, base_url: str, api_key: str, *, requests_per_minute: int = 30) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str | None = None,
+        *,
+        requests_per_minute: int = 30,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
-        self.api_key = api_key
+        # Caller may override via env (e.g. INEC rotates the public key); otherwise
+        # use the published one. Pass empty string to actively suppress the header.
+        self.api_key = PUBLIC_INEC_CLIENT_KEY if api_key is None else api_key
         self.bucket = TokenBucket(capacity=requests_per_minute, refill_seconds=60.0)
         self._session = requests.Session()
 
@@ -75,8 +97,8 @@ class IrevClient:
         self._session.mount("https://", adapter)
         self._session.mount("http://", adapter)
         self._session.headers.update(_DEFAULT_HEADERS)
-        if api_key:
-            self._session.headers["x-api-key"] = api_key
+        if self.api_key:
+            self._session.headers["x-api-key"] = self.api_key
 
     def get(self, path: str, *, timeout: int = 90, params: dict[str, Any] | None = None) -> Any:
         self.bucket.acquire()

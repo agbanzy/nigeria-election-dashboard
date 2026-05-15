@@ -22,9 +22,9 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
-      - key: IREV_API_KEY
-        scope: RUN_TIME
-        type: SECRET
+      # IREV_API_KEY intentionally unset — IrevClient uses INEC's public
+      # Angular client key by default. Override via the DO console only if
+      # INEC rotates the SPA key.
       - key: IREV_API_BASE
         scope: RUN_TIME
         value: https://dolphin-app-sleqh.ondigitalocean.app/api/v1
@@ -77,9 +77,9 @@ workers:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
-      - key: IREV_API_KEY
-        scope: RUN_TIME
-        type: SECRET
+      # IREV_API_KEY intentionally unset — IrevClient uses INEC's public
+      # Angular client key by default. Override via the DO console only if
+      # INEC rotates the SPA key.
       - key: IREV_API_BASE
         scope: RUN_TIME
         value: https://dolphin-app-sleqh.ondigitalocean.app/api/v1

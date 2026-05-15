@@ -13,7 +13,7 @@ class Config:
     log_level: str
     database_url: str
     irev_api_base: str
-    irev_api_key: str
+    irev_api_key: str | None
     scraper_enabled: bool
     scraper_default_state_id: int
     scraper_interval_live_seconds: int
@@ -34,7 +34,9 @@ class Config:
             irev_api_base=os.environ.get(
                 "IREV_API_BASE", "https://dolphin-app-sleqh.ondigitalocean.app/api/v1"
             ),
-            irev_api_key=os.environ.get("IREV_API_KEY", ""),
+            # INEC ships a public Angular client key in their SPA — not a secret.
+            # IrevClient falls back to that constant when IREV_API_KEY is unset.
+            irev_api_key=os.environ.get("IREV_API_KEY") or None,
             scraper_enabled=os.environ.get("SCRAPER_ENABLED", "true").lower() == "true",
             scraper_default_state_id=int(os.environ.get("SCRAPER_DEFAULT_STATE_ID", "15")),
             scraper_interval_live_seconds=int(os.environ.get("SCRAPER_INTERVAL_LIVE", "120")),
