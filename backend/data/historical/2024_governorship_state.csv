@@ -1,0 +1,7 @@
+state_code,party_code,votes,candidate_name,is_incumbent
+ED,PDP,291667,Asue Ighodalo,false
+ED,APC,144471,Monday Okpebholo,false
+ED,LP,90727,Olumide Akpata,false
+ON,APC,366781,Lucky Aiyedatiwa,true
+ON,PDP,117845,Agboola Ajayi,false
+ON,LP,7058,Olorunfemi Ayodele,false

@@ -104,8 +104,17 @@ export default function ElectionDetailPage() {
           </div>
 
           {data.standings.length === 0 ? (
-            <div className="text-sm text-dim italic">
-              No PU-level votes yet for this election. Results sync is still in progress.
+            <div className="text-sm text-dim border border-dashboard-border rounded p-4 space-y-2">
+              <p>No vote tallies for this election yet.</p>
+              <p className="text-xs">
+                INEC&apos;s IReV API exposes scanned EC8A result-sheet images, not parsed
+                vote counts. Numbers arrive in this dashboard via:
+              </p>
+              <ul className="text-xs list-disc pl-5 space-y-1">
+                <li>Curated historical CSVs (top-of-ticket races already loaded)</li>
+                <li>OCR pipeline over the EC8A scans (Phase D)</li>
+                <li>External datasets (Stears, Dataphyte) for state aggregates</li>
+              </ul>
             </div>
           ) : (
             <table className="w-full text-sm">

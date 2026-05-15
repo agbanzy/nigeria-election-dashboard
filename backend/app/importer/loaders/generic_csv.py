@@ -78,9 +78,17 @@ def load_csv(
                 rows_skipped += 1
                 continue
 
-            state = session.scalar(select(State).where(State.code == row.state_code))
-            if state is None:
-                errors.append(f"row {i}: unknown state_code={row.state_code}")
+            # `NG` is a synthetic code for nation-level rows; everything else
+            # must resolve to a real state.
+            state: State | None = None
+            if row.state_code.upper() != "NG":
+                state = session.scalar(select(State).where(State.code == row.state_code))
+                if state is None:
+                    errors.append(f"row {i}: unknown state_code={row.state_code}")
+                    rows_skipped += 1
+                    continue
+            elif aggregation != "national":
+                errors.append(f"row {i}: state_code=NG only valid for aggregation=national")
                 rows_skipped += 1
                 continue
 
@@ -94,7 +102,7 @@ def load_csv(
                 session,
                 cycle=cycle,
                 election_type=election_type,
-                state_id=state.state_id if aggregation != "national" else None,
+                state_id=state.state_id if (state and aggregation != "national") else None,
                 irev_election_id=None,
                 election_date=None,
                 status="historical",
@@ -102,7 +110,7 @@ def load_csv(
             elections_touched.add(election.election_id)
 
             lga = None
-            if row.lga_name:
+            if row.lga_name and state is not None:
                 lga = session.scalar(
                     select(Lga).where(
                         Lga.state_id == state.state_id, Lga.name == row.lga_name
@@ -135,7 +143,7 @@ def load_csv(
                     election_id=election.election_id,
                     pu_id=None,
                     lga_id=lga.lga_id if lga else None,
-                    state_id=state.state_id if aggregation != "national" else None,
+                    state_id=state.state_id if (state and aggregation != "national") else None,
                     aggregation=aggregation,
                     party_id=party.party_id,
                     votes=row.votes,

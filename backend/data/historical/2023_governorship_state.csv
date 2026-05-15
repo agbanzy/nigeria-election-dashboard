@@ -1,0 +1,10 @@
+state_code,party_code,votes,candidate_name,is_incumbent
+IM,APC,540308,Hope Uzodinma,true
+IM,LP,64081,Athan Achonu,false
+IM,PDP,71503,Samuel Anyanwu,false
+KO,APC,446237,Usman Ododo,false
+KO,SDP,259052,Murtala Yakubu Ajaka,false
+KO,PDP,46362,Dino Melaye,false
+BY,PDP,175196,Douye Diri,true
+BY,APC,110108,Timipre Sylva,false
+BY,LP,905,Udengs Eradiri,false
