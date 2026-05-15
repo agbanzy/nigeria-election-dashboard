@@ -2,19 +2,27 @@
 
 Single global engine, lazy-initialized via `init_engine()` from the app factory or CLI entry.
 Use `session_scope()` for short-lived transactions in request handlers and scripts.
+
+Schema model: DO managed Postgres 15 dev tier hands the app a non-owner role
+that can't write to the `public` schema. We use an `elections` schema we create
+and own ourselves. Override with `DB_SCHEMA` env var if needed.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import normalize_database_url
+
+
+SCHEMA_NAME = os.environ.get("DB_SCHEMA", "elections")
 
 
 class Base(DeclarativeBase):
@@ -29,6 +37,19 @@ def init_engine(database_url: str, *, echo: bool = False) -> Engine:
     global _engine, _SessionLocal
     url = normalize_database_url(database_url)
     _engine = create_engine(url, echo=echo, pool_pre_ping=True, future=True)
+
+    # Every new connection pins search_path to our schema so unqualified table
+    # references resolve correctly. Postgres-only — no-op for SQLite tests.
+    @event.listens_for(_engine, "connect")
+    def _set_search_path(dbapi_conn, _conn_record):  # type: ignore[no-untyped-def]
+        if _engine is None or _engine.dialect.name != "postgresql":
+            return
+        cur = dbapi_conn.cursor()
+        try:
+            cur.execute(f'SET search_path TO "{SCHEMA_NAME}", public')
+        finally:
+            cur.close()
+
     _SessionLocal = sessionmaker(bind=_engine, autoflush=False, expire_on_commit=False)
     return _engine
 

@@ -36,6 +36,12 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    import os
+
+    from sqlalchemy import text as _text
+
+    schema = os.environ.get("DB_SCHEMA", "elections")
+
     config.set_main_option("sqlalchemy.url", _url())
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
@@ -43,22 +49,19 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        # Postgres 15 removed the default PUBLIC CREATE on the public schema.
-        # DO managed PG dev tier hands us a database-owner role; that owner has
-        # implicit rights via pg_database_owner, but we still need to explicitly
-        # grant ourselves CREATE so Alembic can build alembic_version.
-        # Failure is non-fatal: the migration will surface a clearer error if
-        # privileges genuinely can't be obtained.
-        from sqlalchemy import text as _text
-
-        try:
-            connection.execute(_text("CREATE SCHEMA IF NOT EXISTS public"))
-            connection.execute(_text("GRANT ALL ON SCHEMA public TO CURRENT_USER"))
+        # DO managed PG 15 dev tier: app role can't write to `public`. Create a
+        # schema we own and target it for everything (alembic_version + tables).
+        if connection.dialect.name == "postgresql":
+            connection.execute(_text(f'CREATE SCHEMA IF NOT EXISTS "{schema}" AUTHORIZATION CURRENT_USER'))
+            connection.execute(_text(f'SET search_path TO "{schema}", public'))
             connection.commit()
-        except Exception:
-            connection.rollback()
 
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            version_table_schema=schema if connection.dialect.name == "postgresql" else None,
+            include_schemas=True,
+        )
         with context.begin_transaction():
             context.run_migrations()
 
