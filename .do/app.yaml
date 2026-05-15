@@ -125,9 +125,7 @@ jobs:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
-  # Header discovery as a cheap POST_DEPLOY (≈7 IReV calls). The scraper
-  # worker then opportunistically syncs structure + stats in the background.
-  # Idempotent; safe to leave in.
+  # Header discovery + curated historical seed. Both idempotent.
   - name: discover-headers
     kind: POST_DEPLOY
     github:
@@ -135,7 +133,7 @@ jobs:
       branch: main
     source_dir: backend
     build_command: pip install -r requirements.txt
-    run_command: python -m app.scraper.backfill
+    run_command: python -m app.scraper.backfill && python -m app.importer.loaders.seed_historical
     envs:
       - key: DATABASE_URL
         scope: RUN_TIME

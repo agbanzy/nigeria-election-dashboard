@@ -1,0 +1,5 @@
+state_code,party_code,votes,candidate_name,is_incumbent
+NG,APC,8794726,Bola Tinubu,false
+NG,PDP,6984520,Atiku Abubakar,false
+NG,LP,6101533,Peter Obi,false
+NG,NNPP,1496687,Rabiu Kwankwaso,false

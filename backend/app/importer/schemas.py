@@ -17,7 +17,11 @@ Aggregation = Literal["pu", "ward", "lga", "state", "national"]
 class ResultRow(BaseModel):
     """One row of vote results at some aggregation level."""
 
-    state_code: str = Field(min_length=2, max_length=2, description="ISO-like 2-letter, e.g. 'FC'")
+    state_code: str = Field(
+        min_length=2,
+        max_length=2,
+        description="ISO-like 2-letter (e.g. 'FC'); use 'NG' for nation-level rows",
+    )
     lga_name: str | None = None
     ward_name: str | None = None
     pu_code: str | None = None
