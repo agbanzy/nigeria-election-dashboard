@@ -1,112 +1,147 @@
 "use client";
 
-import { useApiData } from "@/hooks/useApiData";
-import { Ward } from "@/lib/types";
-import MiniProgress from "@/components/shared/MiniProgress";
-import Badge from "@/components/shared/Badge";
-import { SkeletonTable } from "@/components/shared/SkeletonLoader";
-import { pctColor } from "@/lib/utils";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
-import Link from "next/link";
-import { use } from "react";
+/**
+ * Legacy /elections/[lgaName] route. New shape uses numeric election IDs;
+ * if the param is numeric we render standings, otherwise we point the user
+ * at the new /states/[code] route.
+ */
 
-export default function LGADetailPage({
-  params,
-}: {
-  params: Promise<{ lgaName: string }>;
-}) {
-  const { lgaName } = use(params);
-  const decoded = decodeURIComponent(lgaName);
-  const { data: wards, error: wardsErr, isLoading: wardsLoading } = useApiData<Ward[]>(
-    `/api/ward-breakdown/${encodeURIComponent(decoded)}`
+import Link from "next/link";
+import { useParams } from "next/navigation";
+
+import EnpBadge from "@/components/shared/EnpBadge";
+import MarginBar from "@/components/shared/MarginBar";
+import MethodologyDisclosure from "@/components/shared/MethodologyDisclosure";
+import { useApiData } from "@/hooks/useApiData";
+import type { ElectionRow } from "@/lib/api";
+
+interface Standings {
+  election: ElectionRow;
+  standings: {
+    party_id: number;
+    party_code: string;
+    party_name: string;
+    party_color: string | null;
+    candidate: string | null;
+    is_incumbent: boolean;
+    votes: number;
+    share: number;
+  }[];
+  stats: {
+    total_votes: number;
+    accredited: number | null;
+    registered: number | null;
+    turnout: number | null;
+    margin: number | null;
+    enp: number;
+    competitiveness: number | null;
+  };
+}
+
+export default function ElectionDetailPage() {
+  const params = useParams<{ lgaName: string }>();
+  const raw = (params.lgaName || "").trim();
+  const numeric = /^\d+$/.test(raw) ? Number(raw) : null;
+  const { data, error } = useApiData<Standings>(
+    numeric ? `/api/elections/${numeric}/standings` : null,
+    60_000,
   );
+
+  if (!numeric) {
+    return (
+      <div className="max-w-2xl mx-auto p-6 space-y-4">
+        <h1 className="text-xl font-extrabold text-primary">Route changed</h1>
+        <p className="text-sm text-dim">
+          The dashboard now uses numeric election IDs. Browse by state at{" "}
+          <Link className="underline text-accent-green" href="/states/FC">
+            /states/[state-code]
+          </Link>
+          {" "}or the full election list at{" "}
+          <Link className="underline text-accent-green" href="/elections">
+            /elections
+          </Link>
+          .
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
-      {wardsErr && (
-        <div className="bg-accent-red/10 border border-accent-red/30 rounded-xl px-4 py-3 text-[13px] text-accent-red font-semibold">
-          Failed to load ward data. Retrying automatically...
-        </div>
-      )}
+      {error && <div className="text-accent-red text-sm">Standings unavailable.</div>}
+      {!data ? (
+        <div className="text-sm text-dim">Loading…</div>
+      ) : (
+        <>
+          <header>
+            <h1 className="text-xl font-extrabold text-primary">
+              {data.election.election_type_label} · {data.election.cycle}
+            </h1>
+            <p className="text-sm text-dim">
+              State ID {data.election.state_id ?? "national"} · {data.election.election_date || "date unknown"}
+            </p>
+          </header>
 
-      <div className="flex items-center gap-3">
-        <Link
-          href="/elections"
-          aria-label="Back to elections"
-          className="p-2 rounded-lg bg-dashboard-card border border-dashboard-border hover:border-accent-green/50 transition-colors"
-        >
-          <ArrowLeftIcon className="w-4 h-4" />
-        </Link>
-        <h1 className="text-lg font-extrabold">
-          {decoded} &mdash; Ward Breakdown
-        </h1>
-      </div>
+          <div className="flex flex-wrap gap-3 text-sm">
+            <div className="bg-dashboard-card rounded p-3 border border-dashboard-border">
+              <div className="text-[10px] uppercase text-dim">Total votes</div>
+              <div className="font-mono font-bold">{data.stats.total_votes.toLocaleString()}</div>
+            </div>
+            <div className="bg-dashboard-card rounded p-3 border border-dashboard-border">
+              <div className="text-[10px] uppercase text-dim">Turnout</div>
+              <div className="font-mono">
+                {data.stats.turnout != null ? `${(data.stats.turnout * 100).toFixed(1)}%` : "—"}
+              </div>
+            </div>
+            <div className="bg-dashboard-card rounded p-3 border border-dashboard-border">
+              <div className="text-[10px] uppercase text-dim">Margin</div>
+              <MarginBar value={data.stats.margin ?? null} />
+            </div>
+            <div className="bg-dashboard-card rounded p-3 border border-dashboard-border">
+              <div className="text-[10px] uppercase text-dim">ENP</div>
+              <EnpBadge value={data.stats.enp} />
+            </div>
+          </div>
 
-      <div className="bg-dashboard-card border border-dashboard-border rounded-xl p-4 overflow-x-auto">
-        {wardsLoading && !wards ? (
-          <SkeletonTable rows={8} cols={5} />
-        ) : (
-          <table className="w-full border-collapse text-[13px]">
-            <thead>
-              <tr>
-                {["Ward", "Type", "PUs", "Results", "Progress"].map((h) => (
-                  <th
-                    key={h}
-                    className="text-left px-3 py-2.5 text-dim font-bold text-[10px] uppercase tracking-wider border-b-2 border-dashboard-border"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {(wards || []).length > 0 ? (
-                wards!.map((w, i) => {
-                  const pct =
-                    w.total_pus > 0
-                      ? parseFloat(
-                          ((w.results_uploaded / w.total_pus) * 100).toFixed(1)
-                        )
-                      : 0;
-                  return (
-                    <tr key={i} className="hover:bg-dashboard-card-hover">
-                      <td className="px-3 py-2.5 border-b border-dashboard-border font-semibold">
-                        {w.ward_name}
-                      </td>
-                      <td className="px-3 py-2.5 border-b border-dashboard-border">
-                        <Badge variant="blue">{w.election_type}</Badge>
-                      </td>
-                      <td className="px-3 py-2.5 border-b border-dashboard-border">
-                        {w.total_pus}
-                      </td>
-                      <td className="px-3 py-2.5 border-b border-dashboard-border">
-                        {w.results_uploaded}
-                      </td>
-                      <td className="px-3 py-2.5 border-b border-dashboard-border">
-                        <div className="flex items-center gap-2">
-                          <MiniProgress pct={pct} width="80px" />
-                          <span
-                            className="text-[12px] font-bold"
-                            style={{ color: pctColor(pct) }}
-                          >
-                            {pct}%
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
+          {data.standings.length === 0 ? (
+            <div className="text-sm text-dim italic">
+              No PU-level votes yet for this election. Results sync is still in progress.
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="text-[11px] uppercase text-dim border-b border-dashboard-border">
                 <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-dim">
-                    {wardsLoading ? "Loading..." : "No ward data yet"}
-                  </td>
+                  <th className="text-left py-2 pr-3">Party</th>
+                  <th className="text-left py-2 pr-3">Candidate</th>
+                  <th className="text-right py-2 pr-3">Votes</th>
+                  <th className="text-right py-2">Share</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {data.standings.map((s) => (
+                  <tr key={s.party_id} className="border-b border-dashboard-border/40">
+                    <td className="py-2 pr-3">
+                      <span
+                        className="inline-block w-2 h-2 rounded-full mr-2"
+                        style={{ background: s.party_color || "#94a3b8" }}
+                      />
+                      {s.party_code}
+                    </td>
+                    <td className="py-2 pr-3">
+                      {s.candidate || "—"}
+                      {s.is_incumbent && " (i)"}
+                    </td>
+                    <td className="py-2 pr-3 text-right font-mono">{s.votes.toLocaleString()}</td>
+                    <td className="py-2 text-right font-mono">{(s.share * 100).toFixed(2)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          <MethodologyDisclosure />
+        </>
+      )}
     </div>
   );
 }
