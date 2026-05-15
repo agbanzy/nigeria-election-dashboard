@@ -112,10 +112,41 @@ class Election(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
+    # Sync state — driven by app.scraper.sync. The daemon picks targets via
+    # sync_complete=False ORDER BY sync_priority, results_synced_at NULLS FIRST.
+    headers_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    structure_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    results_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expected_pus: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    uploaded_pus: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sync_complete: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # 1=live, 2=preflight, 3=recent, 5=historical (default), 9=ignore
+    sync_priority: Mapped[int] = mapped_column(SmallInteger, default=5, nullable=False)
+
     __table_args__ = (
         UniqueConstraint("cycle", "election_type", "state_id", name="uq_election_unique"),
         Index("ix_elections_cycle_type", "cycle", "election_type"),
         Index("ix_elections_irev_id", "irev_election_id"),
+        Index("ix_elections_sync_queue", "sync_complete", "sync_priority"),
+    )
+
+
+class IrevRawCache(Base):
+    """Cache of every successful IReV API response.
+
+    Lets us re-process historical data without re-fetching, and gives a
+    durable audit trail of what INEC's API returned and when.
+    """
+
+    __tablename__ = "irev_raw_cache"
+
+    cache_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    url_hash: Mapped[str] = mapped_column(CHAR(64), unique=True, nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    body: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 

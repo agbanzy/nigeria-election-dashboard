@@ -29,7 +29,20 @@ def create_app(config: Config | None = None) -> Flask:
     init_engine(cfg.database_url)
 
     # Register blueprints.
-    from app.api import health, calendar as calendar_api, states, elections, overview, methodology, analysis as analysis_api, candidates, scrape, results, live
+    from app.api import (
+        analysis as analysis_api,
+        calendar as calendar_api,
+        candidates,
+        elections,
+        health,
+        live,
+        methodology,
+        overview,
+        results,
+        scrape,
+        states,
+        sync as sync_api,
+    )
 
     app.register_blueprint(health.bp)
     app.register_blueprint(overview.bp)
@@ -42,5 +55,6 @@ def create_app(config: Config | None = None) -> Flask:
     app.register_blueprint(scrape.bp)
     app.register_blueprint(methodology.bp)
     app.register_blueprint(live.bp)
+    app.register_blueprint(sync_api.bp)
 
     return app

@@ -125,17 +125,17 @@ jobs:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
-  # One-shot historical backfill. Idempotent; safe to leave in. Pulls every
-  # election IReV exposes (2022-2026, all 7 types). Currently ~400 elections
-  # so the job typically completes in <10 min.
-  - name: backfill
+  # Header discovery as a cheap POST_DEPLOY (≈7 IReV calls). The scraper
+  # worker then opportunistically syncs structure + stats in the background.
+  # Idempotent; safe to leave in.
+  - name: discover-headers
     kind: POST_DEPLOY
     github:
       repo: agbanzy/fct-election-dashboard
       branch: main
     source_dir: backend
     build_command: pip install -r requirements.txt
-    run_command: python -m app.scraper.backfill --cycles 2026,2025,2024,2023,2022 --types presidential,governorship,senate,reps,state_hoa,lg_chairman,councillor
+    run_command: python -m app.scraper.backfill
     envs:
       - key: DATABASE_URL
         scope: RUN_TIME
