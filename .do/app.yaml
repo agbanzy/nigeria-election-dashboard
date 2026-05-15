@@ -125,7 +125,7 @@ jobs:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
-  # Header discovery + curated historical seed. Both idempotent.
+  # Header discovery (cheap, ≈7 IReV calls). Idempotent.
   - name: discover-headers
     kind: POST_DEPLOY
     github:
@@ -133,7 +133,7 @@ jobs:
       branch: main
     source_dir: backend
     build_command: pip install -r requirements.txt
-    run_command: python -m app.scraper.backfill && python -m app.importer.loaders.seed_historical
+    run_command: python -m app.scraper.backfill
     envs:
       - key: DATABASE_URL
         scope: RUN_TIME
@@ -141,3 +141,17 @@ jobs:
       - key: IREV_API_BASE
         scope: RUN_TIME
         value: https://dolphin-app-sleqh.ondigitalocean.app/api/v1
+  # Curated historical seed (CSVs of INEC-certified top-of-ticket totals).
+  # Idempotent — uses ingestion_sources.name to skip already-loaded files.
+  - name: seed-historical
+    kind: POST_DEPLOY
+    github:
+      repo: agbanzy/fct-election-dashboard
+      branch: main
+    source_dir: backend
+    build_command: pip install -r requirements.txt
+    run_command: python -m app.importer.loaders.seed_historical
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
