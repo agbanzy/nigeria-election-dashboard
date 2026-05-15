@@ -1,13 +1,14 @@
-"""Background scraper daemon.
+"""Background scraper daemon — wake-policy + opportunistic sync.
 
-Wake policy is calendar-driven: idle 24h unless an election is live (2-min cycle)
-or within the configured pre-flight window (5-min cycle).
+Two responsibilities:
 
-Runs as the `worker` component on DO App Platform — separate process from `web`
-so scraper stalls never affect API latency.
+  1. Live event handling. When the calendar says an election is live or in the
+     pre-flight window, sync those state's elections aggressively.
+  2. Opportunistic background sync. When idle, drain the sync queue at a polite
+     rate — historical backfill spread across days, not hours of burst.
 
-Usage:
-    python -m app.scraper.daemon
+Header discovery runs once a day no matter what — cheap (~7 calls) and keeps
+us aware of newly-published election rows.
 """
 
 from __future__ import annotations
@@ -16,25 +17,20 @@ import logging
 import signal
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.config import Config
 from app.db import init_engine, session_scope
+from app.scraper import sync
 from app.scraper.calendar import decide_mode
-from app.scraper.discovery import discover_elections_for_state
-from app.scraper.election_types import ELECTION_TYPE_IDS
 from app.scraper.irev_client import IrevClient
-from app.scraper.phases import (
-    LIVE_SOURCE_NAME,
-    ensure_election,
-    ensure_source,
-    log_phase,
-    scrape_lga_structure,
-)
+from app.scraper.phases import LIVE_SOURCE_NAME, ensure_source
 
 log = logging.getLogger(__name__)
 
 _running = True
+_last_header_sync: datetime | None = None
+HEADER_REFRESH_INTERVAL = timedelta(hours=24)
 
 
 def _handle_signal(signum: int, frame) -> None:  # type: ignore[no-untyped-def]
@@ -66,74 +62,69 @@ def main() -> int:
         ensure_source(session, LIVE_SOURCE_NAME)
 
     while _running:
+        interval = cfg.scraper_interval_idle_seconds
         try:
-            with session_scope() as session:
-                decision = decide_mode(
-                    session,
-                    live_interval=cfg.scraper_interval_live_seconds,
-                    preflight_interval=cfg.scraper_interval_preflight_seconds,
-                    idle_interval=cfg.scraper_interval_idle_seconds,
-                    preflight_window_hours=cfg.scraper_preflight_window_hours,
-                )
-            log.info(
-                "wake decision: mode=%s interval=%ss states=%s next=%s",
-                decision.mode,
-                decision.interval_seconds,
-                sorted(decision.state_ids),
-                decision.next_event.election_date if decision.next_event else None,
-            )
-            if decision.mode != "idle" and decision.state_ids:
-                _run_cycle(client, state_ids=decision.state_ids)
-        except Exception:  # noqa: BLE001 — never let scraper thread die on a transient error
+            interval = _run_iteration(client, cfg)
+        except Exception:  # noqa: BLE001
             log.exception("scraper loop iteration failed")
-            decision_interval = cfg.scraper_interval_idle_seconds
 
-        _interruptible_sleep(decision.interval_seconds)
+        _interruptible_sleep(interval)
     return 0
 
 
-def _run_cycle(client: IrevClient, *, state_ids: frozenset[int]) -> None:
-    types = [t for t, v in ELECTION_TYPE_IDS.items() if v]
-    for state_id in sorted(state_ids):
-        for etype in types:
+def _run_iteration(client: IrevClient, cfg: Config) -> int:
+    global _last_header_sync
+    now = datetime.now(timezone.utc)
+
+    # Header discovery once per day, no matter what mode.
+    if _last_header_sync is None or now - _last_header_sync > HEADER_REFRESH_INTERVAL:
+        with session_scope() as session:
             try:
-                with session_scope() as session:
-                    elections = discover_elections_for_state(
-                        client, state_id=state_id, election_type=etype
-                    )
-                    for raw in elections:
-                        irev_id = raw.get("_id") or raw.get("election_id")
-                        if not irev_id:
-                            continue
-                        elec = ensure_election(
-                            session,
-                            cycle=_extract_cycle(raw),
-                            election_type=etype,
-                            state_id=state_id,
-                            irev_election_id=str(irev_id),
-                            election_date=None,
-                            status="live",
-                        )
-                        scrape_lga_structure(
-                            client, session, election=elec, state_id=state_id
-                        )
-                        log_phase(
-                            session,
-                            phase="live",
-                            state_id=state_id,
-                            election_id=elec.election_id,
-                            status="ok",
-                        )
-            except Exception:  # noqa: BLE001
-                log.exception("cycle phase failed state=%s type=%s", state_id, etype)
+                touched = sync.discover_election_headers(session, client)
+                _last_header_sync = now
+                log.info("daemon: header discovery touched %s", touched)
+            except Exception:
+                log.exception("daemon: header discovery failed")
 
+    with session_scope() as session:
+        decision = decide_mode(
+            session,
+            live_interval=cfg.scraper_interval_live_seconds,
+            preflight_interval=cfg.scraper_interval_preflight_seconds,
+            idle_interval=cfg.scraper_interval_idle_seconds,
+            preflight_window_hours=cfg.scraper_preflight_window_hours,
+        )
+        depth = sync.queue_depth(session)
 
-def _extract_cycle(raw: dict[str, object]) -> int:
-    date_str = str(raw.get("election_date") or "")[:4]
-    try:
-        return int(date_str)
-    except ValueError:
-        return datetime.now(timezone.utc).year
+    log.info(
+        "daemon: mode=%s interval=%ss queue=%s",
+        decision.mode,
+        decision.interval_seconds,
+        depth,
+    )
+
+    if decision.mode == "live":
+        # Aggressive sync — every cycle, push targets through structure+stats.
+        with session_scope() as session:
+            counters = sync.tick(session, client, max_api_calls=30)
+        log.info("daemon: live tick %s", counters)
+    elif decision.mode == "preflight":
+        with session_scope() as session:
+            counters = sync.tick(session, client, max_api_calls=15)
+        log.info("daemon: preflight tick %s", counters)
+    else:
+        # Idle — drain the queue politely. 20 calls per cycle, 30 min cycle =
+        # 40 calls/hour, ~960 calls/day. Plenty for ~400 elections over a
+        # week or two without hammering INEC.
+        if depth["pending_total"] > 0:
+            with session_scope() as session:
+                counters = sync.tick(session, client, max_api_calls=20)
+            log.info("daemon: idle tick %s", counters)
+            # When idle but we have queue work, shorten the sleep so backfill
+            # doesn't take literal days.
+            return min(decision.interval_seconds, 1800)  # 30 min
+
+    return decision.interval_seconds
 
 
 def _interruptible_sleep(seconds: int) -> None:

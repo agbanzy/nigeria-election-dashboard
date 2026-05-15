@@ -109,7 +109,52 @@ class IrevClient:
         resp.raise_for_status()
         if not resp.content:
             return None
-        return resp.json()
+        body = resp.json()
+        # Best-effort: write to local cache table. Failure here is non-fatal
+        # — caching is an optimization, not a correctness requirement.
+        try:
+            self._maybe_cache(url, params, resp.status_code, body)
+        except Exception:  # noqa: BLE001
+            pass
+        return body
+
+    def _maybe_cache(
+        self,
+        url: str,
+        params: dict[str, Any] | None,
+        status: int,
+        body: Any,
+    ) -> None:
+        # Lazy import to avoid pulling DB into pure HTTP test paths.
+        from sqlalchemy import select
+        from sqlalchemy.dialects.postgresql import insert
+
+        from app.db import session_scope
+        from app.models import IrevRawCache
+
+        import hashlib
+        import json as _json
+
+        canonical = url + ("?" + _json.dumps(params, sort_keys=True) if params else "")
+        url_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+        with session_scope() as session:
+            stmt = insert(IrevRawCache).values(
+                url_hash=url_hash,
+                url=canonical[:1000],
+                status_code=status,
+                body=body if isinstance(body, (dict, list)) else None,
+            )
+            # Upsert on conflict (url_hash unique).
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["url_hash"],
+                set_={
+                    "status_code": stmt.excluded.status_code,
+                    "body": stmt.excluded.body,
+                    "fetched_at": __import__("sqlalchemy").func.now(),
+                },
+            )
+            session.execute(stmt)
 
     def list_elections(self, *, election_type_id: str) -> Any:
         return self.get("/elections", params={"election_type": election_type_id})
