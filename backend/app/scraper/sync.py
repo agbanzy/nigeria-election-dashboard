@@ -1,14 +1,17 @@
 """Incremental sync engine.
 
-Three idempotent operations:
+Four idempotent operations driven by the daemon:
 
-  1. discover_election_headers() — list each election type ONCE (7 cheap API
-     calls), upsert election headers. Sets headers_synced_at.
+  1. discover_election_headers() — list each election type ONCE (≈7 calls),
+     upsert election headers. Sets headers_synced_at.
   2. sync_election_structure(election) — pull LGAs + wards. Sets
      structure_synced_at. Skipped if already done within freshness window.
-  3. sync_election_results(election) — pull /result/stats then per-ward PUs.
-     Sets results_synced_at, expected_pus, uploaded_pus, and sync_complete
-     when expected_pus == uploaded_pus.
+  3. sync_election_stats(election) — pull /result/stats. Updates
+     expected_pus / uploaded_pus. Marks sync_complete on completion.
+  4. sync_election_pus(election) — walk /pus?ward=<id> per ward, parse the
+     `votes` array (present for 2026+ data), upsert PollingUnit rows and
+     ElectionResult rows with aggregation='pu'. One ward per tick keeps
+     it polite. This is the PU → ward → LGA → state → national pipeline.
 
 The daemon calls `tick(client, max_api_calls)` to drain the queue at a polite
 rate. Historical elections (sync_priority=5) tick at idle pace; live ones
@@ -17,6 +20,7 @@ rate. Historical elections (sync_priority=5) tick at idle pace; live ones
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -24,7 +28,17 @@ from typing import Any
 from sqlalchemy import and_, func, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Election, IrevRawCache, State
+from app.importer.normalizers import resolve_party
+from app.models import (
+    Election,
+    ElectionResult,
+    IngestionSource,
+    IrevRawCache,
+    Lga,
+    PollingUnit,
+    State,
+    Ward,
+)
 from app.scraper.election_types import (
     ELECTION_TYPE_IDS,
     LABELS,
@@ -33,10 +47,12 @@ from app.scraper.election_types import (
 from app.scraper.irev_client import IrevClient
 from app.scraper.phases import (
     BACKFILL_SOURCE_NAME,
+    LIVE_SOURCE_NAME,
     ensure_election,
     ensure_source,
     log_phase,
     scrape_lga_structure,
+    upsert_polling_unit,
 )
 
 log = logging.getLogger(__name__)
@@ -278,7 +294,13 @@ def select_next_targets(session: Session, *, limit: int = 5) -> list[Election]:
 def tick(session: Session, client: IrevClient, *, max_api_calls: int) -> dict[str, int]:
     """Advance the sync queue, doing at most `max_api_calls` IReV calls."""
     calls = 0
-    counters = {"structure": 0, "stats": 0, "elections_touched": 0}
+    counters = {
+        "structure": 0,
+        "stats": 0,
+        "pu_wards": 0,
+        "pu_results": 0,
+        "elections_touched": 0,
+    }
     targets = select_next_targets(session, limit=max_api_calls)
     for elec in targets:
         if calls >= max_api_calls:
@@ -287,22 +309,177 @@ def tick(session: Session, client: IrevClient, *, max_api_calls: int) -> dict[st
         if elec.structure_synced_at is None and elec.state_id is not None:
             if sync_election_structure(session, client, elec):
                 counters["structure"] += 1
-                # Structure walk = 1 call to /lga/state/{id}
                 calls += 1
 
         if calls >= max_api_calls:
             break
 
-        # Stats keep getting refreshed until sync_complete flips True
         if elec.irev_election_id and not elec.sync_complete:
             if sync_election_stats(session, client, elec):
                 counters["stats"] += 1
                 calls += 1
 
+        # PU walk — only after structure exists, and only when budget remains.
+        if (
+            calls < max_api_calls
+            and elec.structure_synced_at is not None
+            and elec.irev_election_id
+            and elec.state_id is not None
+        ):
+            n_wards, n_results = sync_election_pus(
+                session, client, elec, max_wards=max(1, max_api_calls - calls)
+            )
+            counters["pu_wards"] += n_wards
+            counters["pu_results"] += n_results
+            calls += n_wards
+
         counters["elections_touched"] += 1
 
     counters["api_calls"] = calls
     return counters
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Op 4: per-PU walk → ElectionResult(aggregation='pu')
+# ────────────────────────────────────────────────────────────────────────────
+
+PARTY_VOTE_CEILING = 100_000  # sanity guard
+
+
+def sync_election_pus(
+    session: Session,
+    client: IrevClient,
+    election: Election,
+    *,
+    max_wards: int = 5,
+) -> tuple[int, int]:
+    """Walk wards under this election's state, fetch /pus?ward=<id>, persist
+    PU-level vote rows. Skips wards already covered.
+
+    Returns (wards_processed, rows_inserted).
+    """
+    if not election.irev_election_id or election.state_id is None:
+        return 0, 0
+
+    stmt = (
+        select(Ward)
+        .join(Lga, Lga.lga_id == Ward.lga_id)
+        .where(Lga.state_id == election.state_id, Ward.irev_ward_id.isnot(None))
+        .limit(max_wards * 4)
+    )
+    candidates = list(session.scalars(stmt))
+    if not candidates:
+        return 0, 0
+
+    source = ensure_source(session, LIVE_SOURCE_NAME)
+    processed = 0
+    rows_inserted = 0
+    for ward in candidates:
+        if processed >= max_wards:
+            break
+        already = session.scalar(
+            select(func.count(ElectionResult.result_id))
+            .join(PollingUnit, PollingUnit.pu_id == ElectionResult.pu_id)
+            .where(
+                ElectionResult.election_id == election.election_id,
+                PollingUnit.ward_id == ward.ward_id,
+            )
+        ) or 0
+        if already > 0:
+            continue
+        try:
+            resp = client.pus_for_ward(election.irev_election_id, str(ward.irev_ward_id))
+            n = _persist_ward_pu_results(session, election, ward, resp, source_id=source.source_id)
+            rows_inserted += n
+            log_phase(
+                session,
+                phase="pu",
+                state_id=election.state_id,
+                election_id=election.election_id,
+                status="ok",
+                message=f"ward={ward.ward_id} rows={n}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.exception("sync: pu fetch failed e=%s w=%s", election.election_id, ward.ward_id)
+            log_phase(
+                session,
+                phase="pu",
+                state_id=election.state_id,
+                election_id=election.election_id,
+                status="error",
+                message=str(exc)[:200],
+            )
+        processed += 1
+    return processed, rows_inserted
+
+
+def _persist_ward_pu_results(
+    session: Session,
+    election: Election,
+    ward: Ward,
+    resp: Any,
+    *,
+    source_id: int,
+) -> int:
+    data = resp.get("data") if isinstance(resp, dict) else resp
+    if not isinstance(data, list):
+        return 0
+    inserted = 0
+    for pu_raw in data:
+        if not isinstance(pu_raw, dict):
+            continue
+        pu = upsert_polling_unit(
+            session,
+            ward,
+            irev_pu_id=_as_int_safe(pu_raw.get("polling_unit_id") or pu_raw.get("_id")),
+            pu_code=pu_raw.get("pu_code") or pu_raw.get("code"),
+            name=pu_raw.get("name"),
+        )
+        votes_field = pu_raw.get("votes")
+        if isinstance(votes_field, str):
+            try:
+                votes_field = json.loads(votes_field)
+            except json.JSONDecodeError:
+                votes_field = None
+        if not isinstance(votes_field, list):
+            continue
+        for v in votes_field:
+            if not isinstance(v, dict):
+                continue
+            code = (v.get("party_code") or "").upper().strip()
+            try:
+                count = int(v.get("vote") or 0)
+            except (TypeError, ValueError):
+                continue
+            if not code or count < 0 or count > PARTY_VOTE_CEILING:
+                continue
+            party = resolve_party(session, code=code, cycle=election.cycle, autocreate=True)
+            if party is None:
+                continue
+            session.add(
+                ElectionResult(
+                    election_id=election.election_id,
+                    pu_id=pu.pu_id,
+                    state_id=election.state_id,
+                    aggregation="pu",
+                    party_id=party.party_id,
+                    votes=count,
+                    source_id=source_id,
+                )
+            )
+            inserted += 1
+    if inserted:
+        session.flush()
+    return inserted
+
+
+def _as_int_safe(v: Any) -> int | None:
+    if v is None:
+        return None
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
 
 
 def queue_depth(session: Session) -> dict[str, int]:
