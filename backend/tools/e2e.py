@@ -177,10 +177,16 @@ def t_standings_with_data() -> str:
 
 
 def t_standings_no_data() -> str:
-    d = fetch_json("/api/elections/26/standings")
+    """Pick any senate/reps race (we haven't ingested NASS results) to verify
+    the empty-state path stays intact."""
+    elections = fetch_json("/api/elections?type=senate")
+    if not elections:
+        return "no senate elections in DB to test empty path"
+    eid = elections[0]["election_id"]
+    d = fetch_json(f"/api/elections/{eid}/standings")
     assert d["standings"] == [], d
     assert d["stats"]["total_votes"] == 0, d
-    return "empty standings, zero stats"
+    return f"senate elec={eid} empty as expected"
 
 
 def t_pres_standings_match_inec() -> str:
