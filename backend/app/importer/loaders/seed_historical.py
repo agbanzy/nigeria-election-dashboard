@@ -58,13 +58,15 @@ DATASETS: list[tuple[str, int, str, str, str, str, str, str]] = [
         "INEC-certified state totals for the 2024 off-cycle Governorship races (ED, ON)",
     ),
     # FCT 2026 Area Council results — extracted from IReV per-PU JSON via the
-    # legacy scrape (parsed vote tallies INEC publishes for area council races).
+    # legacy scrape (parsed vote tallies INEC publishes for area council
+    # races). v2 source names because migration 0005 cleaned up the v1 rows
+    # that had "Municipal" instead of "AMAC".
     (
         "2026_fct_chairman_lga.csv",
         2026,
         "lg_chairman",
         "lga",
-        "inec_irev_2026_fct_chairman",
+        "inec_irev_2026_fct_chairman_v2",
         "public-domain",
         "https://www.inecelectionresults.ng/",
         "FCT 2026 Area Council Chairman aggregated to LGA from IReV PU JSON",
@@ -74,7 +76,7 @@ DATASETS: list[tuple[str, int, str, str, str, str, str, str]] = [
         2026,
         "councillor",
         "ward",
-        "inec_irev_2026_fct_councillor",
+        "inec_irev_2026_fct_councillor_v2",
         "public-domain",
         "https://www.inecelectionresults.ng/",
         "FCT 2026 Area Council Councillor aggregated to ward from IReV PU JSON",
@@ -85,7 +87,7 @@ DATASETS: list[tuple[str, int, str, str, str, str, str, str]] = [
 CANDIDATE_DATASETS: list[tuple[str, str, str, str, str]] = [
     (
         "2026_fct_candidates.csv",
-        "inec_2026_fct_candidates",
+        "inec_2026_fct_candidates_v2",
         "public-domain",
         "https://www.inecelectionresults.ng/",
         "FCT 2026 Area Council candidates (chairman + councillor)",
