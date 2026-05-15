@@ -13,6 +13,7 @@ import {
   MapIcon,
   MoonIcon,
   SunIcon,
+  UsersIcon,
   XMarkIcon,
   DocumentTextIcon,
 } from "@heroicons/react/24/outline";
@@ -24,9 +25,10 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { name: "Overview", href: "/", icon: HomeIcon },
-  { name: "States", href: "/states", icon: MapIcon, dynamic: true },
+  { name: "States", href: "/states", icon: MapIcon },
   { name: "Elections", href: "/elections", icon: ChartBarIcon },
-  { name: "Cycles", href: "/cycles", icon: CalendarDaysIcon, dynamic: true },
+  { name: "Candidates", href: "/candidates", icon: UsersIcon },
+  { name: "Cycles", href: "/cycles", icon: CalendarDaysIcon },
   { name: "Analytics", href: "/analytics", icon: ChartPieIcon },
   { name: "Live", href: "/live", icon: BoltIcon },
   { name: "Methodology", href: "/methodology", icon: DocumentTextIcon },

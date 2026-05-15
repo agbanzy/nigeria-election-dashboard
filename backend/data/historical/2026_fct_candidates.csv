@@ -1,0 +1,25 @@
+state_code,election_type,cycle,lga_name,party_code,candidate_name,is_incumbent
+FC,lg_chairman,2026,AMAC,AA,Godson Nemieboka,false
+FC,lg_chairman,2026,AMAC,ADC,Moses Paul Ogidi (Dr Mo),false
+FC,lg_chairman,2026,AMAC,ADP,Recheal Elizabeth,false
+FC,lg_chairman,2026,AMAC,APC,Christopher Zakka Maikalangu,true
+FC,lg_chairman,2026,AMAC,APGA,Eze Onyebuchi Chukwu (Delaw),false
+FC,lg_chairman,2026,AMAC,PDP,Zadna Dantani,false
+FC,lg_chairman,2026,AMAC,SDP,Obinna Simon (MC Tagwaye),false
+FC,lg_chairman,2026,AMAC,VARIOUS,Candidates 10-16,false
+FC,lg_chairman,2026,Abaji,AA,Anumnu Abigail,false
+FC,lg_chairman,2026,Abaji,ADC,Mohammed Ibrahim,false
+FC,lg_chairman,2026,Abaji,APC,Abubakar Umar Abdullahi,true
+FC,lg_chairman,2026,Abaji,PDP,Sokodabo Bilyaminu,false
+FC,lg_chairman,2026,Bwari,APC,Joshua Ishaku Musa,false
+FC,lg_chairman,2026,Bwari,PDP,Julius Adamu,false
+FC,lg_chairman,2026,Bwari,VARIOUS,Candidates 4-11,false
+FC,lg_chairman,2026,Gwagwalada,APC,Yahaya Shehu,false
+FC,lg_chairman,2026,Gwagwalada,PDP,Mohammed Kasim,false
+FC,lg_chairman,2026,Gwagwalada,VARIOUS,Candidates 4-11,false
+FC,lg_chairman,2026,Kuje,APC,Danluma Shekwolo,false
+FC,lg_chairman,2026,Kuje,APM,Musa Shekara,false
+FC,lg_chairman,2026,Kuje,PDP,Zakwoyi Danlami,false
+FC,lg_chairman,2026,Kuje,VARIOUS,Candidates 5-11,false
+FC,lg_chairman,2026,Kuje,ZLP,Aju Ukwa,false
+FC,lg_chairman,2026,Kwali,VARIOUS,Candidates 3-9,false

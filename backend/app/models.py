@@ -160,10 +160,17 @@ class Candidate(Base):
     party_id: Mapped[int] = mapped_column(Integer, ForeignKey("parties.party_id"), nullable=False)
     full_name: Mapped[str] = mapped_column(Text, nullable=False)
     is_incumbent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-
-    __table_args__ = (
-        UniqueConstraint("election_id", "party_id", name="uq_candidate_election_party"),
+    # Scope: NULL for federal/gov races (one per state); set for LG / Councillor
+    # races where each LGA / ward fields its own candidates.
+    lga_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("lgas.lga_id"), nullable=True
     )
+    ward_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("wards.ward_id"), nullable=True
+    )
+    # Composite unique handled at the DB level via partial index — see
+    # migration 0004. Skip declarative __table_args__ unique here so it
+    # doesn't fight the index.
 
 
 class IngestionSource(Base):

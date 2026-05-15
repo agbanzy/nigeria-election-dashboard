@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from app.config import Config
 from app.db import init_engine, session_scope
+from app.importer.loaders.candidate_csv import load_candidates_csv
 from app.importer.loaders.generic_csv import load_csv
 from app.models import IngestionSource
 
@@ -55,6 +56,39 @@ DATASETS: list[tuple[str, int, str, str, str, str, str, str]] = [
         "public-domain",
         "https://www.inecnigeria.org/elections/election-results/",
         "INEC-certified state totals for the 2024 off-cycle Governorship races (ED, ON)",
+    ),
+    # FCT 2026 Area Council results — extracted from IReV per-PU JSON via the
+    # legacy scrape (parsed vote tallies INEC publishes for area council races).
+    (
+        "2026_fct_chairman_lga.csv",
+        2026,
+        "lg_chairman",
+        "lga",
+        "inec_irev_2026_fct_chairman",
+        "public-domain",
+        "https://www.inecelectionresults.ng/",
+        "FCT 2026 Area Council Chairman aggregated to LGA from IReV PU JSON",
+    ),
+    (
+        "2026_fct_councillor_ward.csv",
+        2026,
+        "councillor",
+        "ward",
+        "inec_irev_2026_fct_councillor",
+        "public-domain",
+        "https://www.inecelectionresults.ng/",
+        "FCT 2026 Area Council Councillor aggregated to ward from IReV PU JSON",
+    ),
+]
+
+# Candidate CSVs (different shape — handled by candidate_csv loader)
+CANDIDATE_DATASETS: list[tuple[str, str, str, str, str]] = [
+    (
+        "2026_fct_candidates.csv",
+        "inec_2026_fct_candidates",
+        "public-domain",
+        "https://www.inecelectionresults.ng/",
+        "FCT 2026 Area Council candidates (chairman + councillor)",
     ),
 ]
 
@@ -99,6 +133,36 @@ def main() -> None:
         )
 
         # Patch notes on the source row.
+        if summary.rows_imported > 0:
+            with session_scope() as session:
+                src = session.scalar(
+                    select(IngestionSource).where(IngestionSource.name == source_name)
+                )
+                if src and not src.notes:
+                    src.notes = notes
+
+    # Candidate CSVs
+    for filename, source_name, lic, url, notes in CANDIDATE_DATASETS:
+        path = DATA_DIR / filename
+        if not path.exists():
+            log.warning("seed_historical: missing candidate file %s", path)
+            continue
+        with session_scope() as session:
+            existing = session.scalar(
+                select(IngestionSource).where(IngestionSource.name == source_name)
+            )
+            if existing is not None:
+                log.info("seed_historical: candidates %s already ingested", source_name)
+                continue
+
+        log.info("seed_historical: loading candidates %s", filename)
+        summary = load_candidates_csv(
+            filepath=path, source_name=source_name, source_license=lic, source_url=url
+        )
+        log.info(
+            "seed_historical: candidates %s -> imported=%d skipped=%d errors=%s",
+            filename, summary.rows_imported, summary.rows_skipped, summary.errors[:5],
+        )
         if summary.rows_imported > 0:
             with session_scope() as session:
                 src = session.scalar(
