@@ -11,6 +11,11 @@ export const BRAND_TAGLINE = "Pan-Nigeria, multi-cycle election results + analys
 export const DATA_PROVIDER = "INEC IReV + curated historical datasets";
 export const METHODOLOGY_HREF = "/methodology";
 
+// Innoedge attribution
+export const POWERED_BY = "Innoedge";
+export const POWERED_BY_URL = "https://innoedge.tech";
+export const POWERED_BY_TAGLINE = "Innoedge Technologies Ltd";
+
 export interface BrandScope {
   state?: { code: string; name: string } | null;
   cycle?: number | null;

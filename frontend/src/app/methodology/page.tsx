@@ -86,8 +86,20 @@ export default function MethodologyPage() {
         </ul>
       </section>
 
-      <footer className="text-xs text-dim border-t border-dashboard-border pt-4">
-        Data correction or takedown requests: {data?.takedown_contact || "—"}
+      <footer className="text-xs text-dim border-t border-dashboard-border pt-4 space-y-2">
+        <p>Data correction or takedown requests: {data?.takedown_contact || "—"}</p>
+        <p>
+          Powered by{" "}
+          <a
+            href="https://innoedge.tech"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-bold text-accent-green underline"
+          >
+            Innoedge
+          </a>{" "}
+          · Innoedge Technologies Ltd
+        </p>
       </footer>
     </div>
   );
