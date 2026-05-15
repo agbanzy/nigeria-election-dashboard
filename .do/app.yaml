@@ -1,5 +1,5 @@
 name: ng-election-dashboard
-region: nyc
+region: fra
 
 services:
   - name: web
@@ -93,13 +93,11 @@ workers:
 databases:
   - name: db
     engine: PG
-    version: "15"
-    # db-s-dev-database (free) hands the app a heavily restricted user that
-    # can't write to public, can't create schemas, and can't be granted CREATE
-    # on the shared dev cluster. Smallest production tier (~$15/mo) gives a
-    # dedicated cluster where the bound user has full rights on its own DB.
-    size: db-s-1vcpu-1gb
-    num_nodes: 1
+    version: "16"
+    # Reusing an existing managed cluster (user-authorized via AskUserQuestion).
+    # App Platform creates a new database within the cluster, with the app role
+    # as its owner — full rights on its own DB, no PG public-schema gotchas.
+    cluster_name: unimarket-staging-pg
     production: true
 
 jobs:
