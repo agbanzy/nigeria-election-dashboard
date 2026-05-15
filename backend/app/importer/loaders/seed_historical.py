@@ -38,6 +38,16 @@ DATASETS: list[tuple[str, int, str, str, str, str, str, str]] = [
         "INEC-certified national totals for the 2023 Presidential election",
     ),
     (
+        "2023_presidential_state.csv",
+        2023,
+        "presidential",
+        "state",
+        "inec_official_2023_pres_state",
+        "public-domain",
+        "https://www.inecnigeria.org/elections/election-results/",
+        "INEC-certified state-level breakdown of 2023 Presidential (37 states, 4 main parties)",
+    ),
+    (
         "2023_governorship_state.csv",
         2023,
         "governorship",
