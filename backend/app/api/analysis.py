@@ -180,6 +180,60 @@ def competitiveness():
         return jsonify(out)
 
 
+@bp.get("/party-totals")
+def party_totals():
+    """Sum votes per party across all elections matching filters.
+
+    Returns:
+      {grand_total, parties: [{party_code, party_name, party_color, total_votes,
+                              share, elections_count}, ...]}
+    """
+    cycle = request.args.get("cycle", type=int)
+    etype = request.args.get("type")
+    state_code = request.args.get("state")
+    with session_scope() as session:
+        stmt = (
+            select(
+                Party.party_id,
+                Party.code,
+                Party.name,
+                Party.color_hex,
+                func.sum(ElectionResult.votes),
+                func.count(func.distinct(ElectionResult.election_id)),
+            )
+            .join(Party, Party.party_id == ElectionResult.party_id)
+            .join(Election, Election.election_id == ElectionResult.election_id)
+        )
+        if cycle:
+            stmt = stmt.where(Election.cycle == cycle)
+        if etype:
+            stmt = stmt.where(Election.election_type == etype)
+        if state_code:
+            stmt = stmt.join(State, State.state_id == ElectionResult.state_id).where(
+                State.code == state_code.upper()
+            )
+        stmt = stmt.group_by(Party.party_id, Party.code, Party.name, Party.color_hex)
+        stmt = stmt.order_by(func.sum(ElectionResult.votes).desc().nullslast())
+
+        rows = list(session.execute(stmt).all())
+        grand_total = sum(int(v or 0) for _, _, _, _, v, _ in rows)
+        out = []
+        for party_id, code, name, color, total, n_elections in rows:
+            total = int(total or 0)
+            out.append(
+                {
+                    "party_id": party_id,
+                    "party_code": code,
+                    "party_name": name,
+                    "party_color": color,
+                    "total_votes": total,
+                    "share": total / grand_total if grand_total else 0.0,
+                    "elections_count": int(n_elections),
+                }
+            )
+        return jsonify({"grand_total": grand_total, "parties": out})
+
+
 @bp.get("/timeline")
 def scrape_timeline():
     limit = min(request.args.get("limit", default=300, type=int), 2000)
