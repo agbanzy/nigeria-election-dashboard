@@ -94,8 +94,13 @@ databases:
   - name: db
     engine: PG
     version: "15"
-    size: db-s-dev-database
+    # db-s-dev-database (free) hands the app a heavily restricted user that
+    # can't write to public, can't create schemas, and can't be granted CREATE
+    # on the shared dev cluster. Smallest production tier (~$15/mo) gives a
+    # dedicated cluster where the bound user has full rights on its own DB.
+    size: db-s-1vcpu-1gb
     num_nodes: 1
+    production: true
 
 jobs:
   - name: migrate
