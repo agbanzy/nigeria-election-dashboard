@@ -46,3 +46,23 @@ jobs:
       - run: npm run build
         env:
           NEXT_PUBLIC_API_URL: http://placeholder
+
+  e2e:
+    name: e2e (live deployment)
+    runs-on: ubuntu-latest
+    # Only run e2e on push to main (after the merge) so the deploy has a
+    # chance to roll forward. PRs run lint/build/tests but not e2e.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Wait for DO deploy to roll out
+        # POST_DEPLOY jobs take ~3-5 min; give the rolling deploy time.
+        run: sleep 360
+      - name: Run e2e probe
+        run: python3 backend/tools/e2e.py
+        env:
+          E2E_URL: https://ng-election-dashboard-lkxwq.ondigitalocean.app
