@@ -180,7 +180,11 @@ def scrape_lga_structure(
     """
     if not election.irev_election_id:
         return 0
-    data = client.lga_state(election.irev_election_id, state_id) or []
+    resp = client.lga_state(election.irev_election_id, state_id) or {}
+    if isinstance(resp, dict):
+        data = resp.get("data") or []
+    else:
+        data = resp
     count = 0
     for lga_raw in data:
         if not isinstance(lga_raw, dict):
