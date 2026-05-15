@@ -15,18 +15,21 @@ import MethodologyDisclosure from "@/components/shared/MethodologyDisclosure";
 import { useApiData } from "@/hooks/useApiData";
 import type { ElectionRow } from "@/lib/api";
 
+interface PartyRow {
+  party_id: number;
+  party_code: string;
+  party_name: string;
+  party_color: string | null;
+  candidate: string | null;
+  candidate_count?: number;
+  is_incumbent: boolean;
+  votes: number;
+  share: number;
+}
+
 interface Standings {
   election: ElectionRow;
-  standings: {
-    party_id: number;
-    party_code: string;
-    party_name: string;
-    party_color: string | null;
-    candidate: string | null;
-    is_incumbent: boolean;
-    votes: number;
-    share: number;
-  }[];
+  standings: PartyRow[];
   stats: {
     total_votes: number;
     accredited: number | null;
@@ -38,12 +41,28 @@ interface Standings {
   };
 }
 
+interface ByLga {
+  election: ElectionRow;
+  by_lga: {
+    lga_id: number;
+    lga_name: string;
+    total_votes: number;
+    winner_party: string | null;
+    winner_candidate: string | null;
+    standings: PartyRow[];
+  }[];
+}
+
 export default function ElectionDetailPage() {
   const params = useParams<{ lgaName: string }>();
   const raw = (params.lgaName || "").trim();
   const numeric = /^\d+$/.test(raw) ? Number(raw) : null;
   const { data, error } = useApiData<Standings>(
     numeric ? `/api/elections/${numeric}/standings` : null,
+    60_000,
+  );
+  const { data: byLga } = useApiData<ByLga>(
+    numeric ? `/api/elections/${numeric}/by-lga` : null,
     60_000,
   );
 
@@ -146,6 +165,61 @@ export default function ElectionDetailPage() {
                 ))}
               </tbody>
             </table>
+          )}
+
+          {/* Per-LGA breakdown when this election has LGA-keyed results */}
+          {byLga && byLga.by_lga.length > 0 && (
+            <section>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-dim mt-6 mb-3">
+                Results by LGA / Area Council
+              </h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {byLga.by_lga.map((block) => (
+                  <div
+                    key={block.lga_id}
+                    className="rounded-lg border border-dashboard-border bg-dashboard-card p-3"
+                  >
+                    <div className="flex items-baseline justify-between mb-2">
+                      <h3 className="font-bold text-primary">{block.lga_name}</h3>
+                      <span className="text-[11px] text-dim font-mono">
+                        {block.total_votes.toLocaleString()} votes
+                      </span>
+                    </div>
+                    {block.winner_party && (
+                      <div className="text-xs text-accent-green mb-2">
+                        Winner: <span className="font-bold">{block.winner_party}</span>
+                        {block.winner_candidate && ` · ${block.winner_candidate}`}
+                      </div>
+                    )}
+                    <table className="w-full text-xs">
+                      <tbody>
+                        {block.standings.slice(0, 8).map((s) => (
+                          <tr key={s.party_id} className="border-t border-dashboard-border/30">
+                            <td className="py-1 pr-2">
+                              <span
+                                className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle"
+                                style={{ background: s.party_color || "#94a3b8" }}
+                              />
+                              {s.party_code}
+                            </td>
+                            <td className="py-1 pr-2 text-dim">
+                              {s.candidate || "—"}
+                              {s.is_incumbent && " (i)"}
+                            </td>
+                            <td className="py-1 pr-2 text-right font-mono">
+                              {s.votes.toLocaleString()}
+                            </td>
+                            <td className="py-1 text-right font-mono text-dim">
+                              {(s.share * 100).toFixed(1)}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
 
           <MethodologyDisclosure />

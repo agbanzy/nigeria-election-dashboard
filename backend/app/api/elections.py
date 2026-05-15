@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from flask import Blueprint, abort, jsonify, request
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.analysis.competitiveness import competitiveness_index
 from app.analysis.descriptive import margin_of_victory, turnout
@@ -52,24 +52,9 @@ def get_standings(election_id: int):
         if election is None:
             abort(404)
 
-        candidates_by_party = {
-            c.party_id: c
-            for c in session.scalars(
-                select(Candidate).where(Candidate.election_id == election_id)
-            )
-        }
-
-        rows = session.execute(
-            select(
-                ElectionResult.party_id,
-                Party.code,
-                Party.name,
-                Party.color_hex,
-            )
-            .join(Party, Party.party_id == ElectionResult.party_id)
-            .where(ElectionResult.election_id == election_id)
-        ).all()
-
+        # Aggregate votes by party (sum across all ElectionResult rows for
+        # this election, regardless of aggregation level — PU, ward, LGA,
+        # state, national all roll up the same way).
         votes_by_party: dict[int, int] = defaultdict(int)
         accredited_total = 0
         registered_total = 0
@@ -82,19 +67,46 @@ def get_standings(election_id: int):
             if r.registered_voters:
                 registered_total += r.registered_voters
 
+        if not votes_by_party:
+            party_meta: dict[int, tuple[str, str, str | None]] = {}
+        else:
+            party_meta = {
+                p.party_id: (p.code, p.name, p.color_hex)
+                for p in session.scalars(
+                    select(Party).where(Party.party_id.in_(votes_by_party.keys()))
+                )
+            }
+
+        # Candidates for this election — keyed by party for a single name
+        # when there's one per party, or "(multiple)" when LG races have
+        # per-LGA candidates of the same party.
+        candidates_for_party: dict[int, list[Candidate]] = defaultdict(list)
+        for c in session.scalars(select(Candidate).where(Candidate.election_id == election_id)):
+            candidates_for_party[c.party_id].append(c)
+
         standings = []
-        for party_id, code, name, color in rows:
-            v = votes_by_party.get(party_id, 0)
-            cand = candidates_by_party.get(party_id)
+        for party_id, total_votes in votes_by_party.items():
+            code, name, color = party_meta.get(party_id, ("?", "?", None))
+            cands = candidates_for_party.get(party_id, [])
+            if len(cands) == 1:
+                cand_name = cands[0].full_name
+                is_incumbent = cands[0].is_incumbent
+            elif len(cands) > 1:
+                cand_name = f"{len(cands)} candidates"
+                is_incumbent = any(c.is_incumbent for c in cands)
+            else:
+                cand_name = None
+                is_incumbent = False
             standings.append(
                 {
                     "party_id": party_id,
                     "party_code": code,
                     "party_name": name,
                     "party_color": color,
-                    "candidate": cand.full_name if cand else None,
-                    "is_incumbent": cand.is_incumbent if cand else False,
-                    "votes": v,
+                    "candidate": cand_name,
+                    "candidate_count": len(cands),
+                    "is_incumbent": is_incumbent,
+                    "votes": total_votes,
                 }
             )
         standings.sort(key=lambda x: x["votes"], reverse=True)
@@ -121,6 +133,99 @@ def get_standings(election_id: int):
                 },
             }
         )
+
+
+@bp.get("/<int:election_id>/by-lga")
+def standings_by_lga(election_id: int):
+    """Per-LGA standings for LG/Councillor races. Returns one block per LGA
+    that has any results or candidates for this election.
+    """
+    from app.models import Lga
+
+    with session_scope() as session:
+        election = session.get(Election, election_id)
+        if election is None:
+            abort(404)
+
+        # Sum votes per (lga_id, party_id) across all ElectionResult rows
+        # (PU, ward, LGA aggregations all roll into the right LGA bucket).
+        votes_rows = session.execute(
+            select(ElectionResult.lga_id, ElectionResult.party_id, func.sum(ElectionResult.votes))
+            .where(
+                ElectionResult.election_id == election_id,
+                ElectionResult.lga_id.isnot(None),
+            )
+            .group_by(ElectionResult.lga_id, ElectionResult.party_id)
+        ).all()
+        votes_by_lga: dict[int, dict[int, int]] = defaultdict(lambda: defaultdict(int))
+        for lga_id, party_id, total in votes_rows:
+            if lga_id is not None:
+                votes_by_lga[lga_id][party_id] = int(total or 0)
+
+        # Candidates by (lga_id, party_id)
+        cands_by_lga: dict[int, dict[int, Candidate]] = defaultdict(dict)
+        for c in session.scalars(select(Candidate).where(Candidate.election_id == election_id)):
+            if c.lga_id is not None:
+                cands_by_lga[c.lga_id][c.party_id] = c
+
+        # All LGAs we care about: ones with votes OR candidates
+        all_lga_ids = set(votes_by_lga.keys()) | set(cands_by_lga.keys())
+        if not all_lga_ids:
+            return jsonify({"election": _serialize_election(election), "by_lga": []})
+
+        lgas = {
+            l.lga_id: l
+            for l in session.scalars(select(Lga).where(Lga.lga_id.in_(all_lga_ids)))
+        }
+        party_ids: set[int] = set()
+        for v in votes_by_lga.values():
+            party_ids.update(v.keys())
+        for v in cands_by_lga.values():
+            party_ids.update(v.keys())
+        parties = {
+            p.party_id: p
+            for p in session.scalars(select(Party).where(Party.party_id.in_(party_ids)))
+        }
+
+        out_blocks = []
+        for lga_id in sorted(all_lga_ids, key=lambda lid: (lgas[lid].name if lid in lgas else "")):
+            lga = lgas.get(lga_id)
+            votes_pp = votes_by_lga.get(lga_id, {})
+            total = sum(votes_pp.values())
+            block_standings = []
+            relevant_parties = set(votes_pp.keys()) | set(cands_by_lga.get(lga_id, {}).keys())
+            for pid in relevant_parties:
+                party = parties.get(pid)
+                if party is None:
+                    continue
+                cand = cands_by_lga.get(lga_id, {}).get(pid)
+                v = votes_pp.get(pid, 0)
+                block_standings.append(
+                    {
+                        "party_id": pid,
+                        "party_code": party.code,
+                        "party_name": party.name,
+                        "party_color": party.color_hex,
+                        "candidate": cand.full_name if cand else None,
+                        "is_incumbent": cand.is_incumbent if cand else False,
+                        "votes": v,
+                        "share": (v / total) if total else 0.0,
+                    }
+                )
+            block_standings.sort(key=lambda x: x["votes"], reverse=True)
+            winner = block_standings[0] if block_standings and block_standings[0]["votes"] > 0 else None
+            out_blocks.append(
+                {
+                    "lga_id": lga_id,
+                    "lga_name": lga.name if lga else None,
+                    "total_votes": total,
+                    "winner_party": winner["party_code"] if winner else None,
+                    "winner_candidate": winner["candidate"] if winner else None,
+                    "standings": block_standings,
+                }
+            )
+
+        return jsonify({"election": _serialize_election(election), "by_lga": out_blocks})
 
 
 def _serialize_election(e: Election) -> dict:
