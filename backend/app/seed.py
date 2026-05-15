@@ -104,6 +104,7 @@ def seed() -> None:
             if state_id in existing_states:
                 continue
             session.add(State(state_id=state_id, code=code, name=name, zone=zone))
+        session.flush()  # FK: election_calendar.state_id needs states present
         log.info("seeded states (added %d new)", len(STATES) - len(existing_states))
 
         existing_parties = {
@@ -113,6 +114,7 @@ def seed() -> None:
             if (code, active_from) in existing_parties:
                 continue
             session.add(Party(code=code, name=name, color_hex=color, active_from=active_from))
+        session.flush()
         log.info("seeded parties")
 
         existing_cal = {
