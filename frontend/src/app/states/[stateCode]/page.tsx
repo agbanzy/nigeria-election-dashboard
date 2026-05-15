@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * Per-state landing. Header + election-type breakdown + elections list + LGA grid.
+ * Per-state landing. Shows: header, party-totals (when data exists),
+ * election-type tiles, full elections table, LGA grid, candidates.
  */
 
 import Link from "next/link";
@@ -18,6 +19,33 @@ interface LgaRow {
   irev_lga_id: number | null;
 }
 
+interface PartyTotalsResp {
+  grand_total: number;
+  parties: {
+    party_id: number;
+    party_code: string;
+    party_name: string;
+    party_color: string | null;
+    total_votes: number;
+    share: number;
+    elections_count: number;
+  }[];
+}
+
+interface CandidateRow {
+  candidate_id: number;
+  full_name: string;
+  is_incumbent: boolean;
+  party_code: string;
+  party_color: string | null;
+  election_id: number;
+  election_type: string;
+  election_type_label: string;
+  cycle: number;
+  lga_name: string | null;
+  ward_name: string | null;
+}
+
 export default function StatePage() {
   const params = useParams<{ stateCode: string }>();
   const code = (params.stateCode || "").toUpperCase();
@@ -25,8 +53,15 @@ export default function StatePage() {
   const { data: state } = useApiData<StateRow>(`/api/states/${code}`, 60_000);
   const { data: elections } = useApiData<ElectionRow[]>(`/api/elections?state=${code}`, 60_000);
   const { data: lgas } = useApiData<LgaRow[]>(`/api/states/${code}/lgas`, 60_000);
+  const { data: partyTotals } = useApiData<PartyTotalsResp>(
+    `/api/analysis/party-totals?state=${code}`,
+    5 * 60_000,
+  );
+  const { data: candidates } = useApiData<CandidateRow[]>(
+    `/api/candidates?state=${code}&limit=200`,
+    60_000,
+  );
 
-  // Group elections by type
   const byType: Record<string, ElectionRow[]> = {};
   for (const e of elections || []) {
     (byType[e.election_type] ||= []).push(e);
@@ -39,29 +74,59 @@ export default function StatePage() {
         <h1 className="text-2xl font-extrabold text-primary">{state?.name || code}</h1>
         <p className="text-sm text-dim">
           {state?.zone ? `${state.zone} geopolitical zone · ` : ""}
-          {elections?.length ?? 0} elections · {lgas?.length ?? 0} LGAs
+          {elections?.length ?? 0} elections · {lgas?.length ?? 0} LGAs · {candidates?.length ?? 0} candidates
         </p>
       </header>
 
-      {/* Election-type cards */}
+      {partyTotals && partyTotals.grand_total > 0 && (
+        <section>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-dim mb-2">
+            Party share in {state?.name || code} (cumulative across {partyTotals.parties[0]?.elections_count ?? 0} races with data)
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+            {partyTotals.parties.slice(0, 12).map((p) => (
+              <div
+                key={p.party_id}
+                className="rounded border border-dashboard-border bg-dashboard-card p-2"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block w-2 h-2 rounded-full"
+                    style={{ background: p.party_color || "#94a3b8" }}
+                  />
+                  <span className="font-bold text-primary text-sm">{p.party_code}</span>
+                </div>
+                <div className="font-mono font-bold text-base">{p.total_votes.toLocaleString()}</div>
+                <div className="text-[10px] text-dim">{(p.share * 100).toFixed(1)}%</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {sortedTypes.length > 0 && (
-        <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {sortedTypes.map((t) => (
-            <div
-              key={t}
-              className="rounded-lg border border-dashboard-border bg-dashboard-card p-3"
-            >
-              <div className="text-[10px] uppercase tracking-wider text-dim">
-                {byType[t][0].election_type_label}
+        <section>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-dim mb-2">
+            Election types
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {sortedTypes.map((t) => (
+              <div
+                key={t}
+                className="rounded-lg border border-dashboard-border bg-dashboard-card p-3"
+              >
+                <div className="text-[10px] uppercase tracking-wider text-dim">
+                  {byType[t][0].election_type_label}
+                </div>
+                <div className="text-2xl font-extrabold text-primary mt-1">
+                  {byType[t].length}
+                </div>
+                <div className="text-[10px] text-dim mt-1">
+                  {byType[t].map((e) => e.cycle).sort().reverse().slice(0, 3).join(", ")}
+                </div>
               </div>
-              <div className="text-2xl font-extrabold text-primary mt-1">
-                {byType[t].length}
-              </div>
-              <div className="text-[10px] text-dim mt-1">
-                {byType[t].map((e) => e.cycle).sort().reverse().slice(0, 3).join(", ")}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </section>
       )}
 
@@ -101,6 +166,47 @@ export default function StatePage() {
           </table>
         </div>
       </section>
+
+      {candidates && candidates.length > 0 && (
+        <section>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-dim mb-2">
+            Candidates <span className="font-normal text-dim">({candidates.length})</span>
+          </h2>
+          <div className="overflow-x-auto rounded border border-dashboard-border">
+            <table className="w-full text-sm">
+              <thead className="bg-black/20 text-[11px] uppercase tracking-wider text-dim">
+                <tr>
+                  <th className="text-left py-2 px-3">Candidate</th>
+                  <th className="text-left py-2 px-3">Party</th>
+                  <th className="text-left py-2 px-3">Race</th>
+                  <th className="text-left py-2 px-3">Scope</th>
+                </tr>
+              </thead>
+              <tbody>
+                {candidates.slice(0, 50).map((c) => (
+                  <tr key={c.candidate_id} className="border-t border-dashboard-border/40">
+                    <td className="py-2 px-3 font-semibold">
+                      {c.full_name}
+                      {c.is_incumbent && <span className="ml-1 text-[10px] text-accent-orange">(i)</span>}
+                    </td>
+                    <td className="py-2 px-3">
+                      <span
+                        className="inline-block w-2 h-2 rounded-full mr-1 align-middle"
+                        style={{ background: c.party_color || "#94a3b8" }}
+                      />
+                      {c.party_code}
+                    </td>
+                    <td className="py-2 px-3 text-xs">{c.election_type_label} · {c.cycle}</td>
+                    <td className="py-2 px-3 text-xs text-dim">
+                      {c.ward_name ? `${c.lga_name} → ${c.ward_name}` : c.lga_name || "state"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <section>
         <h2 className="text-sm font-bold uppercase tracking-wider text-dim mb-2">
