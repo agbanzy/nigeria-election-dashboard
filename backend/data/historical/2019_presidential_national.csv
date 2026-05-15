@@ -1,0 +1,6 @@
+state_code,party_code,votes,candidate_name,is_incumbent
+NG,APC,15191847,Muhammadu Buhari,true
+NG,PDP,11262978,Atiku Abubakar,false
+NG,AAC,54935,Omoyele Sowore,false
+NG,APGA,97874,Willie Obiano Endorsed,false
+NG,ADC,97874,Obadiah Mailafia,false

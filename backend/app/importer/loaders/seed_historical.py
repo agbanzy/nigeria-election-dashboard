@@ -28,6 +28,26 @@ DATA_DIR = Path(__file__).resolve().parents[3] / "data" / "historical"
 # (filename, cycle, election_type, aggregation, source_name, license, url, notes)
 DATASETS: list[tuple[str, int, str, str, str, str, str, str]] = [
     (
+        "2015_presidential_national.csv",
+        2015,
+        "presidential",
+        "national",
+        "inec_official_2015_pres",
+        "public-domain",
+        "https://www.inecnigeria.org/elections/election-results/",
+        "INEC-certified national totals for the 2015 Presidential (Buhari defeated Jonathan)",
+    ),
+    (
+        "2019_presidential_national.csv",
+        2019,
+        "presidential",
+        "national",
+        "inec_official_2019_pres",
+        "public-domain",
+        "https://www.inecnigeria.org/elections/election-results/",
+        "INEC-certified national totals for the 2019 Presidential (Buhari re-elected vs Atiku)",
+    ),
+    (
         "2023_presidential_national.csv",
         2023,
         "presidential",
@@ -36,6 +56,16 @@ DATASETS: list[tuple[str, int, str, str, str, str, str, str]] = [
         "public-domain",
         "https://www.inecnigeria.org/elections/election-results/",
         "INEC-certified national totals for the 2023 Presidential election",
+    ),
+    (
+        "2023_governorship_march_state.csv",
+        2023,
+        "governorship",
+        "state",
+        "inec_official_2023_gov_march",
+        "public-domain",
+        "https://www.inecnigeria.org/elections/election-results/",
+        "INEC-certified state totals for the 2023 March Governorship races (17+ states)",
     ),
     (
         "2023_presidential_state.csv",

@@ -1,0 +1,5 @@
+state_code,party_code,votes,candidate_name,is_incumbent
+NG,APC,15424921,Muhammadu Buhari,false
+NG,PDP,12853162,Goodluck Jonathan,true
+NG,APGA,18220,Sam Eke,false
+NG,KOWA,13076,Remi Sonaiya,false

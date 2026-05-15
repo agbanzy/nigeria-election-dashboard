@@ -37,12 +37,13 @@ interface Summary {
   by_party: { party_code: string; count: number }[];
 }
 
-const CYCLES = ["", "2026", "2025", "2024", "2023", "2022"];
+const CYCLES = ["", "2026", "2025", "2024", "2023", "2019", "2015"];
 
 export default function CandidatesPage() {
   const [cycle, setCycle] = useState("");
   const [state, setStateCode] = useState("");
   const [etype, setEtype] = useState<ElectionType | "">("");
+  const [party, setParty] = useState("");
   const [incumbent, setIncumbent] = useState(false);
 
   const { data: states } = useApiData<StateRow[]>("/api/states", 5 * 60_000);
@@ -53,10 +54,11 @@ export default function CandidatesPage() {
     if (cycle) p.set("cycle", cycle);
     if (state) p.set("state", state);
     if (etype) p.set("type", etype);
+    if (party) p.set("party", party);
     if (incumbent) p.set("incumbent", "true");
     p.set("limit", "1000");
     return p.toString();
-  }, [cycle, state, etype, incumbent]);
+  }, [cycle, state, etype, party, incumbent]);
 
   const { data: candidates, isLoading } = useApiData<Candidate[]>(
     `/api/candidates?${qs}`,
@@ -97,6 +99,12 @@ export default function CandidatesPage() {
           <option value="">All types</option>
           {ELECTION_TYPES.map((t) => (
             <option key={t} value={t}>{ELECTION_LABELS[t]}</option>
+          ))}
+        </Selector>
+        <Selector label="Party" value={party} onChange={setParty}>
+          <option value="">All parties</option>
+          {(summary?.by_party || []).map((p) => (
+            <option key={p.party_code} value={p.party_code}>{p.party_code} ({p.count})</option>
           ))}
         </Selector>
         <label className="flex items-center gap-1.5 text-xs">
