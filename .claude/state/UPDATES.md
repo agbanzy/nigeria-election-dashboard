@@ -1,5 +1,38 @@
 # UPDATES — append-only changelog (newest at top)
 
+## 2026-05-15T08:24Z — pan-nigeria-refactor — DEPLOYED LIVE
+
+App is live: **https://ng-election-dashboard-lkxwq.ondigitalocean.app**
+
+DO App Platform ID: `d71eb896-bf3e-4d14-830e-2930ecc48c37`
+Region: fra (Frankfurt — colocated with the Postgres cluster)
+PG cluster: `unimarket-staging-pg` (reused; new database created within for this app, app role owns it)
+
+Smoke verification (all 200 OK):
+- `/api/health` → `{db: ok, status: ok}`
+- `/api/states` → 37 states seeded
+- `/api/calendar/next` → Ekiti gubernatorial 2026-06-20 (countdown ~36 days)
+- `/api/overview` → `{totals: {states: 37, lgas: 0, elections: 0}}`
+- `/api/methodology` → 5 stat definitions + 4 known gaps + sources
+- `/` → frontend HTML 200
+
+Deploy iteration (PRs #2 through #10 — all squashed onto main):
+- #2 — regenerate frontend lockfile after adding react-leaflet
+- #3 — bump psycopg pin (DO runtime was Python 3.13)
+- #4 — pin Python to 3.12.7 in runtime.txt (3.14 default broke pydantic-core)
+- #5 — GRANT public schema (didn't help — pre-emptive)
+- #6 — use dedicated `elections` schema (didn't help — couldn't create)
+- #7 — discover writable schema via has_schema_privilege() (revealed the dev-tier role has CREATE on nothing)
+- #8 — upgrade DB to production tier in spec (rejected without cluster_name)
+- #9 — reuse unimarket-staging-pg cluster, relocate to fra (user-authorized; resolved all PG perms)
+- #10 — flush states before election_calendar inserts (FK ordering in seed)
+
+Pending: set `IREV_API_KEY` secret in DO console for the live scraper to authenticate against IReV (currently idle anyway — next live election is Ekiti gubernatorial 2026-06-20).
+
+Commit on main: `9b3f9e2` (or whatever PR #10 resolved to).
+
+
+
 ## 2026-05-14T21:15Z — pan-nigeria-refactor — Phase A + B-frontend skeleton complete
 
 Backend (`backend/app/`):
