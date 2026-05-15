@@ -20,7 +20,13 @@ import {
 
 import { useLiveClock } from "@/hooks/useLiveClock";
 import { useTheme } from "@/context/ThemeContext";
-import { BRAND_NAME, BRAND_TAGLINE } from "@/lib/branding";
+import {
+  BRAND_NAME,
+  BRAND_TAGLINE,
+  POWERED_BY,
+  POWERED_BY_TAGLINE,
+  POWERED_BY_URL,
+} from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -132,6 +138,19 @@ export default function Sidebar() {
               />
             </div>
           </button>
+
+          <a
+            href={POWERED_BY_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block rounded-lg border border-nigeria-green/30 bg-gradient-to-br from-nigeria-green/10 to-nigeria-green/0 px-3 py-2.5 transition-all hover:border-nigeria-green/60 hover:bg-nigeria-green/15 hover:shadow-lg hover:shadow-nigeria-green/20"
+          >
+            <div className="text-[10px] uppercase tracking-wider text-dim">Powered by</div>
+            <div className="text-sm font-extrabold text-primary tracking-tight">
+              {POWERED_BY}
+            </div>
+            <div className="text-[10px] text-dim mt-0.5">{POWERED_BY_TAGLINE}</div>
+          </a>
 
           <div className="text-[10px] text-dim">
             <p>INEC IReV + curated datasets</p>
