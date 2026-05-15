@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from flask import Blueprint, jsonify, request
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text as _text
 
 from app.analysis.competitiveness import competitiveness_index
 from app.analysis.descriptive import margin_of_victory, turnout
@@ -58,9 +58,41 @@ def turnout_by_state():
 
 @bp.get("/enp")
 def enp_by_election():
+    """Read mv_enp when present; fall back to on-the-fly computation otherwise."""
     cycle = request.args.get("cycle", type=int)
     etype = request.args.get("type")
     with session_scope() as session:
+        # Try materialized view first
+        try:
+            mv_sql = "SELECT election_id, cycle, election_type, state_id, enp, total_votes FROM mv_enp"
+            where = []
+            params: dict = {}
+            if cycle:
+                where.append("cycle = :cycle")
+                params["cycle"] = cycle
+            if etype:
+                where.append("election_type = :etype")
+                params["etype"] = etype
+            if where:
+                mv_sql += " WHERE " + " AND ".join(where)
+            mv_rows = list(session.execute(_text(mv_sql), params))
+            if mv_rows:
+                return jsonify(
+                    [
+                        {
+                            "election_id": r[0],
+                            "cycle": r[1],
+                            "type": r[2],
+                            "state_id": r[3],
+                            "enp": float(r[4] or 0),
+                            "margin": _margin_for(session, r[0]),
+                        }
+                        for r in mv_rows
+                    ]
+                )
+        except Exception:
+            pass  # MV may not exist yet — fall through
+
         stmt = select(Election)
         if cycle:
             stmt = stmt.where(Election.cycle == cycle)
@@ -80,6 +112,11 @@ def enp_by_election():
                 }
             )
         return jsonify(out)
+
+
+def _margin_for(session, election_id: int) -> float | None:
+    """Lightweight margin lookup for MV-served rows."""
+    return margin_of_victory(_votes_by_party(session, election_id))
 
 
 @bp.get("/swing")
