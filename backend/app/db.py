@@ -22,7 +22,7 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from app.config import normalize_database_url
 
 
-SCHEMA_NAME = os.environ.get("DB_SCHEMA", "elections")
+SCHEMA_NAME = os.environ.get("DB_SCHEMA", "")  # empty = use the user's default search_path (set by migration)
 
 
 class Base(DeclarativeBase):
@@ -38,17 +38,20 @@ def init_engine(database_url: str, *, echo: bool = False) -> Engine:
     url = normalize_database_url(database_url)
     _engine = create_engine(url, echo=echo, pool_pre_ping=True, future=True)
 
-    # Every new connection pins search_path to our schema so unqualified table
-    # references resolve correctly. Postgres-only — no-op for SQLite tests.
-    @event.listens_for(_engine, "connect")
-    def _set_search_path(dbapi_conn, _conn_record):  # type: ignore[no-untyped-def]
-        if _engine is None or _engine.dialect.name != "postgresql":
-            return
-        cur = dbapi_conn.cursor()
-        try:
-            cur.execute(f'SET search_path TO "{SCHEMA_NAME}", public')
-        finally:
-            cur.close()
+    # Every new connection pins search_path so unqualified table references
+    # resolve to the same schema the migration created tables in. If DB_SCHEMA
+    # is empty we leave the role's default search_path alone (the DO-bound role
+    # typically resolves "$user" first, which is also where the migration runs).
+    if SCHEMA_NAME:
+        @event.listens_for(_engine, "connect")
+        def _set_search_path(dbapi_conn, _conn_record):  # type: ignore[no-untyped-def]
+            if _engine is None or _engine.dialect.name != "postgresql":
+                return
+            cur = dbapi_conn.cursor()
+            try:
+                cur.execute(f'SET search_path TO "{SCHEMA_NAME}", public')
+            finally:
+                cur.close()
 
     _SessionLocal = sessionmaker(bind=_engine, autoflush=False, expire_on_commit=False)
     return _engine
