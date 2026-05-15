@@ -1,0 +1,35 @@
+state_code,party_code,votes,candidate_name,is_incumbent
+LA,APC,762134,Babajide Sanwo-Olu,true
+LA,LP,312329,Gbadebo Rhodes-Vivour,false
+LA,PDP,62449,Olajide Adediran,false
+KD,APC,730002,Uba Sani,false
+KD,PDP,719196,Isa Ashiru,false
+PL,PDP,525299,Caleb Mutfwang,false
+PL,APC,481370,Nentawe Yilwatda,false
+RI,PDP,302614,Siminalayi Fubara,false
+RI,APC,95274,Tonye Cole,false
+KN,NNPP,1019602,Abba Kabir Yusuf,false
+KN,APC,890705,Nasiru Yusuf Gawuna,false
+KN,PDP,84,Mohammed Abacha,false
+ED,APC,144471,Monday Okpebholo,false
+ED,PDP,89585,Asue Ighodalo,false
+AD,PDP,430861,Ahmadu Fintiri,true
+AD,APC,398788,Aishatu Binani,false
+EN,LP,160895,Peter Mbah,false
+EN,PDP,135121,Peter Mbah,false
+AB,LP,175467,Alex Otti,false
+AB,APC,69118,Ikechi Emenike,false
+AB,PDP,57597,Okey Ahiwe,false
+SO,APC,453661,Ahmed Aliyu,false
+SO,PDP,404632,Saidu Umar,false
+KT,APC,859892,Dikko Umaru Radda,false
+KT,PDP,486620,Yakubu Lado Danmarke,false
+NA,APC,347209,Abdullahi Sule,true
+NA,PDP,283016,David Ombugadu,false
+NA,SDP,68056,Jonathan Asake,false
+OY,APC,257658,Teslim Folarin,false
+OY,PDP,563756,Seyi Makinde,true
+ZA,APC,377726,Dauda Lawal,false
+ZA,PDP,377726,Bello Matawalle,true
+KW,APC,234699,AbdulRahman AbdulRazaq,true
+KW,PDP,210024,Shuaibu Yaman,false
