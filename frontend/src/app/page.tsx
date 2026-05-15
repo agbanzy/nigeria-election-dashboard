@@ -1,23 +1,24 @@
 "use client";
 
 /**
- * National overview — replaces the legacy FCT-only home.
+ * National overview. Adapts to active filter scope.
  *
- * Reads from the NEW `/api/overview` shape (totals, cycles, types, recent
- * elections) and renders state-aware copy via `lib/branding.ts`.
- *
- * Filter changes (state / cycle / type) re-fetch with query params so the
- * same page works as a per-state landing too.
+ * Reads from `/api/overview` (filtered when state/cycle set), renders the
+ * countdown widget, key stat cards, the choropleth state grid, recent
+ * elections, and per-cycle/per-type breakdowns with bar charts.
  */
 
 import Link from "next/link";
+import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 
 import ElectionCountdown from "@/components/shared/ElectionCountdown";
+import MethodologyDisclosure from "@/components/shared/MethodologyDisclosure";
 import NigeriaChoropleth from "@/components/shared/NigeriaChoropleth";
 import StatCard from "@/components/shared/StatCard";
-import MethodologyDisclosure from "@/components/shared/MethodologyDisclosure";
 import { useFilters } from "@/context/FilterContext";
 import { useApiData } from "@/hooks/useApiData";
+import type { StateRow } from "@/lib/api";
+import { ELECTION_LABELS, type ElectionType } from "@/lib/electionTypeConfig";
 import { formatNumber } from "@/lib/utils";
 
 interface OverviewResponse {
@@ -43,12 +44,24 @@ export default function HomePage() {
   if (cycle) qs.set("cycle", String(cycle));
   const path = `/api/overview${qs.toString() ? `?${qs}` : ""}`;
   const { data: overview, error } = useApiData<OverviewResponse>(path, 60_000);
+  const { data: states } = useApiData<StateRow[]>("/api/states", 5 * 60_000);
+  const stateById = new Map((states || []).map((s) => [s.state_id, s] as const));
+
+  const cycleChartData = (overview?.cycles || [])
+    .slice()
+    .sort((a, b) => a.cycle - b.cycle)
+    .map((c) => ({ name: String(c.cycle), elections: c.elections }));
+
+  const typeChartData = (overview?.election_types || []).map((t) => ({
+    name: ELECTION_LABELS[t.type as ElectionType] || t.type,
+    count: t.count,
+  }));
 
   return (
     <div className="space-y-6">
       {error && (
         <div className="bg-accent-red/10 border border-accent-red/30 rounded-xl px-4 py-3 text-[13px] text-accent-red">
-          Failed to load overview. The backend may still be migrating — see /methodology.
+          Failed to load overview. Retrying…
         </div>
       )}
 
@@ -78,11 +91,53 @@ export default function HomePage() {
           value={overview ? String(overview.cycles.length) : "—"}
           sub={
             overview && overview.cycles.length
-              ? `${overview.cycles[overview.cycles.length - 1].cycle}–${overview.cycles[0].cycle}`
+              ? `${Math.min(...overview.cycles.map((c) => c.cycle))}–${Math.max(
+                  ...overview.cycles.map((c) => c.cycle),
+                )}`
               : "—"
           }
           color="#fbbf24"
         />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <section className="rounded-lg border border-dashboard-border bg-dashboard-card p-4">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-dim mb-2">
+            Elections by cycle
+          </h3>
+          {cycleChartData.length === 0 ? (
+            <div className="text-sm text-dim italic">No cycle data yet.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={cycleChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis dataKey="name" stroke="#6b7280" fontSize={11} />
+                <YAxis stroke="#6b7280" fontSize={11} />
+                <Tooltip contentStyle={{ background: "#0c1226", border: "1px solid #1f2538" }} />
+                <Bar dataKey="elections" fill="#10b981" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </section>
+
+        <section className="rounded-lg border border-dashboard-border bg-dashboard-card p-4">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-dim mb-2">
+            By election type
+          </h3>
+          {typeChartData.length === 0 ? (
+            <div className="text-sm text-dim italic">No type data yet.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={typeChartData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis type="number" stroke="#6b7280" fontSize={11} />
+                <YAxis type="category" dataKey="name" stroke="#6b7280" fontSize={10} width={140} />
+                <Tooltip contentStyle={{ background: "#0c1226", border: "1px solid #1f2538" }} />
+                <Bar dataKey="count" fill="#3b82f6" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </section>
       </div>
 
       <NigeriaChoropleth />
@@ -93,30 +148,35 @@ export default function HomePage() {
         </h2>
         {overview && overview.recent_elections.length === 0 && (
           <div className="text-sm text-dim italic">
-            No elections ingested yet. The historical importer ships in Phase C; the live scraper
-            wakes for the next scheduled election.
+            No elections ingested yet. The daemon is syncing now.
           </div>
         )}
         <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {(overview?.recent_elections || []).map((e) => (
-            <li
-              key={e.election_id}
-              className="rounded border border-dashboard-border bg-dashboard-card px-3 py-2 text-sm flex items-center justify-between"
-            >
-              <div>
-                <div className="font-semibold text-primary">
-                  {e.type} · {e.cycle}
-                </div>
-                <div className="text-[11px] text-dim">{e.date || "date unknown"} · {e.status}</div>
-              </div>
-              <Link
-                href={`/elections/${e.election_id}`}
-                className="text-xs text-accent-green underline"
+          {(overview?.recent_elections || []).map((e) => {
+            const s = e.state_id ? stateById.get(e.state_id) : null;
+            return (
+              <li
+                key={e.election_id}
+                className="rounded border border-dashboard-border bg-dashboard-card px-3 py-2 text-sm flex items-center justify-between"
               >
-                view →
-              </Link>
-            </li>
-          ))}
+                <div>
+                  <div className="font-semibold text-primary">
+                    {ELECTION_LABELS[e.type as ElectionType] || e.type} · {e.cycle}
+                  </div>
+                  <div className="text-[11px] text-dim">
+                    {s ? s.name : e.state_id ? `state #${e.state_id}` : "National"} ·{" "}
+                    {e.date || "date unknown"} · {e.status}
+                  </div>
+                </div>
+                <Link
+                  href={`/elections/${e.election_id}`}
+                  className="text-xs text-accent-green underline"
+                >
+                  view →
+                </Link>
+              </li>
+            );
+          })}
         </ul>
         <MethodologyDisclosure />
       </section>
