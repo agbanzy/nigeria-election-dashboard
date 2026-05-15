@@ -107,7 +107,7 @@ export default function AnalyticsPage() {
               <YAxis stroke="#6b7280" fontSize={11} tickFormatter={(v) => `${v}%`} />
               <Tooltip
                 contentStyle={{ background: "#0c1226", border: "1px solid #1f2538" }}
-                formatter={(v: number) => [`${v.toFixed(1)}%`, "Turnout"]}
+                formatter={(value) => [`${Number(value).toFixed(1)}%`, "Turnout"] as [string, string]}
               />
               <Bar dataKey="turnout" fill="#10b981" />
             </BarChart>
@@ -154,8 +154,13 @@ export default function AnalyticsPage() {
                 <Tooltip
                   contentStyle={{ background: "#0c1226", border: "1px solid #1f2538" }}
                   cursor={{ strokeDasharray: "3 3" }}
-                  formatter={(v: number, name: string) =>
-                    name === "Margin %" ? [`${v.toFixed(1)}%`, name] : [v.toFixed(2), name]
+                  formatter={(value, name) =>
+                    [
+                      name === "Margin %"
+                        ? `${Number(value).toFixed(1)}%`
+                        : Number(value).toFixed(2),
+                      String(name),
+                    ] as [string, string]
                   }
                 />
                 <Scatter data={enpScatter} fill="#a78bfa" />
