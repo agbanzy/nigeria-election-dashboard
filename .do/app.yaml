@@ -86,6 +86,12 @@ workers:
       - key: SCRAPER_ENABLED
         scope: RUN_TIME
         value: "true"
+      # Multiplier on per-tick API budgets + shorter idle sleep. Defaults to
+      # 1.0 (polite, ~960 calls/day). Bump to 5.0 to drain ~400 elections in
+      # <1 day. 8.0+ may trip INEC rate limits.
+      - key: SCRAPER_BURST_FACTOR
+        scope: RUN_TIME
+        value: "5.0"
       - key: LOG_LEVEL
         scope: RUN_TIME
         value: INFO

@@ -20,6 +20,9 @@ class Config:
     scraper_interval_preflight_seconds: int
     scraper_interval_idle_seconds: int
     scraper_preflight_window_hours: int
+    # Burst multiplier — multiplies per-tick API budget AND shortens the
+    # idle sleep cycle. Defaults to 1.0 (polite). Set to 4-5 for full sync.
+    scraper_burst_factor: float
     cors_origins: str
 
     @classmethod
@@ -47,6 +50,7 @@ class Config:
             scraper_preflight_window_hours=int(
                 os.environ.get("SCRAPER_PREFLIGHT_WINDOW_HOURS", "6")
             ),
+            scraper_burst_factor=float(os.environ.get("SCRAPER_BURST_FACTOR", "1.0")),
             cors_origins=os.environ.get("CORS_ORIGINS", "*"),
         )
 
