@@ -11,6 +11,7 @@
 import Link from "next/link";
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 
+import AnimatedCounter from "@/components/shared/AnimatedCounter";
 import ElectionCountdown from "@/components/shared/ElectionCountdown";
 import MethodologyDisclosure from "@/components/shared/MethodologyDisclosure";
 import NigeriaChoropleth from "@/components/shared/NigeriaChoropleth";
@@ -70,25 +71,25 @@ export default function HomePage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard
           label="States covered"
-          value={overview ? formatNumber(overview.totals.states) : "—"}
+          value={overview ? <AnimatedCounter value={overview.totals.states} /> : "—"}
           sub="of 36 + FCT"
           color="#3b82f6"
         />
         <StatCard
           label="LGAs covered"
-          value={overview ? formatNumber(overview.totals.lgas) : "—"}
+          value={overview ? <AnimatedCounter value={overview.totals.lgas} /> : "—"}
           sub="of 774"
           color="#10b981"
         />
         <StatCard
           label="Elections on record"
-          value={overview ? formatNumber(overview.totals.elections) : "—"}
+          value={overview ? <AnimatedCounter value={overview.totals.elections} /> : "—"}
           sub="across all cycles"
           color="#a78bfa"
         />
         <StatCard
           label="Distinct cycles"
-          value={overview ? String(overview.cycles.length) : "—"}
+          value={overview ? <AnimatedCounter value={overview.cycles.length} /> : "—"}
           sub={
             overview && overview.cycles.length
               ? `${Math.min(...overview.cycles.map((c) => c.cycle))}–${Math.max(

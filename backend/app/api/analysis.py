@@ -17,7 +17,7 @@ from app.analysis.descriptive import margin_of_victory, turnout
 from app.analysis.enp import effective_number_of_parties
 from app.analysis.swing import compute_swings
 from app.db import session_scope
-from app.models import Election, ElectionResult, Party, ScrapeLog, State
+from app.models import Candidate, Election, ElectionResult, Party, ScrapeLog, State
 
 bp = Blueprint("analysis", __name__, url_prefix="/api/analysis")
 
@@ -232,6 +232,222 @@ def party_totals():
                 }
             )
         return jsonify({"grand_total": grand_total, "parties": out})
+
+
+@bp.get("/winners")
+def winners_per_state():
+    """Per-state winner for the given cycle + election_type. Used by the
+    party-colored choropleth + state comparison view.
+
+    Returns: {state_code: str → {winner_party_code, winner_candidate, votes,
+                                 share, second_place, margin}}
+    """
+    cycle = request.args.get("cycle", default=2023, type=int)
+    etype = request.args.get("type", default="presidential")
+    with session_scope() as session:
+        # Get all states
+        states = {s.state_id: s for s in session.scalars(select(State))}
+        # Find the election rows
+        elections = list(
+            session.scalars(
+                select(Election).where(
+                    Election.cycle == cycle,
+                    Election.election_type == etype,
+                )
+            )
+        )
+        out: dict[str, dict] = {}
+        for elec in elections:
+            # Get vote totals per party for this election
+            party_rows = session.execute(
+                select(
+                    ElectionResult.party_id,
+                    Party.code,
+                    Party.color_hex,
+                    func.sum(ElectionResult.votes),
+                )
+                .join(Party, Party.party_id == ElectionResult.party_id)
+                .where(ElectionResult.election_id == elec.election_id)
+                .group_by(ElectionResult.party_id, Party.code, Party.color_hex)
+                .order_by(func.sum(ElectionResult.votes).desc())
+            ).all()
+            if not party_rows:
+                continue
+            top = party_rows[0]
+            second = party_rows[1] if len(party_rows) > 1 else None
+            total = sum(int(r[3] or 0) for r in party_rows)
+            winner_votes = int(top[3] or 0)
+            margin = (
+                (winner_votes - int(second[3] or 0)) / total
+                if (second and total)
+                else None
+            )
+            # Lookup candidate
+            cand = session.scalar(
+                select(Candidate).where(
+                    Candidate.election_id == elec.election_id,
+                    Candidate.party_id == top[0],
+                )
+            )
+            state = states.get(elec.state_id) if elec.state_id else None
+            key = state.code if state else "NG"
+            out[key] = {
+                "state_code": key,
+                "state_name": state.name if state else "National",
+                "winner_party_id": top[0],
+                "winner_party_code": top[1],
+                "winner_party_color": top[2],
+                "winner_candidate": cand.full_name if cand else None,
+                "winner_votes": winner_votes,
+                "winner_share": (winner_votes / total) if total else 0.0,
+                "second_party_code": second[1] if second else None,
+                "margin": margin,
+                "total_votes": total,
+            }
+        return jsonify(out)
+
+
+@bp.get("/zone-summary")
+def zone_summary():
+    """Aggregate votes by geopolitical zone × party for a given cycle/type."""
+    cycle = request.args.get("cycle", default=2023, type=int)
+    etype = request.args.get("type", default="presidential")
+    with session_scope() as session:
+        rows = session.execute(
+            select(
+                State.zone,
+                Party.code,
+                Party.color_hex,
+                func.sum(ElectionResult.votes),
+            )
+            .join(Party, Party.party_id == ElectionResult.party_id)
+            .join(State, State.state_id == ElectionResult.state_id)
+            .join(Election, Election.election_id == ElectionResult.election_id)
+            .where(Election.cycle == cycle, Election.election_type == etype)
+            .group_by(State.zone, Party.code, Party.color_hex)
+        ).all()
+        by_zone: dict[str, dict] = {}
+        for zone, code, color, total in rows:
+            z = by_zone.setdefault(zone, {"zone": zone, "total": 0, "parties": []})
+            z["parties"].append({"party_code": code, "party_color": color, "votes": int(total or 0)})
+            z["total"] += int(total or 0)
+        # Sort parties within each zone, compute shares + winner
+        for z in by_zone.values():
+            z["parties"].sort(key=lambda p: p["votes"], reverse=True)
+            for p in z["parties"]:
+                p["share"] = p["votes"] / z["total"] if z["total"] else 0.0
+            z["winner"] = z["parties"][0]["party_code"] if z["parties"] else None
+        return jsonify(
+            sorted(by_zone.values(), key=lambda z: -z["total"])
+        )
+
+
+@bp.get("/party-trajectory")
+def party_trajectory():
+    """Party vote-share across cycles for a given election type. Drives the
+    multi-cycle line/area chart on /insights."""
+    etype = request.args.get("type", default="presidential")
+    state_code = request.args.get("state")
+    with session_scope() as session:
+        stmt = (
+            select(
+                Election.cycle,
+                Party.code,
+                Party.color_hex,
+                func.sum(ElectionResult.votes),
+            )
+            .join(Party, Party.party_id == ElectionResult.party_id)
+            .join(Election, Election.election_id == ElectionResult.election_id)
+            .where(Election.election_type == etype)
+            .group_by(Election.cycle, Party.code, Party.color_hex)
+            .order_by(Election.cycle.asc())
+        )
+        if state_code:
+            stmt = stmt.join(State, State.state_id == ElectionResult.state_id).where(
+                State.code == state_code.upper()
+            )
+        rows = list(session.execute(stmt).all())
+        cycles: dict[int, dict] = {}
+        for cycle, code, color, votes in rows:
+            cycles.setdefault(cycle, {"cycle": cycle, "parties": []})
+            cycles[cycle]["parties"].append({"party_code": code, "party_color": color, "votes": int(votes or 0)})
+        for c in cycles.values():
+            total = sum(p["votes"] for p in c["parties"])
+            for p in c["parties"]:
+                p["share"] = p["votes"] / total if total else 0.0
+        return jsonify(sorted(cycles.values(), key=lambda c: c["cycle"]))
+
+
+@bp.get("/biggest-swings")
+def biggest_swings():
+    """Top N party share changes between two cycles, same type, across states."""
+    a = request.args.get("a", type=int)
+    b = request.args.get("b", type=int)
+    etype = request.args.get("type", default="presidential")
+    limit = min(request.args.get("limit", default=20, type=int), 200)
+    if not (a and b):
+        return jsonify({"error": "missing required: a, b"}), 400
+    with session_scope() as session:
+        def shares(cycle: int) -> dict:
+            stmt = (
+                select(
+                    State.code,
+                    State.name,
+                    Party.code,
+                    Party.color_hex,
+                    func.sum(ElectionResult.votes),
+                )
+                .join(Party, Party.party_id == ElectionResult.party_id)
+                .join(State, State.state_id == ElectionResult.state_id)
+                .join(Election, Election.election_id == ElectionResult.election_id)
+                .where(Election.cycle == cycle, Election.election_type == etype)
+                .group_by(State.code, State.name, Party.code, Party.color_hex)
+            )
+            out: dict = {}
+            for sc, sn, pc, color, v in session.execute(stmt).all():
+                state_block = out.setdefault(sc, {"state_code": sc, "state_name": sn, "parties": {}, "total": 0})
+                state_block["parties"][pc] = {"votes": int(v or 0), "color": color}
+                state_block["total"] += int(v or 0)
+            return out
+
+        a_data = shares(a)
+        b_data = shares(b)
+        all_states = set(a_data) | set(b_data)
+        swings = []
+        all_parties: set[str] = set()
+        for sc in all_states:
+            for blk in (a_data.get(sc, {}).get("parties") or {}).keys():
+                all_parties.add(blk)
+            for blk in (b_data.get(sc, {}).get("parties") or {}).keys():
+                all_parties.add(blk)
+        for sc in all_states:
+            a_blk = a_data.get(sc, {})
+            b_blk = b_data.get(sc, {})
+            a_total = a_blk.get("total") or 0
+            b_total = b_blk.get("total") or 0
+            for pc in all_parties:
+                a_v = (a_blk.get("parties") or {}).get(pc, {}).get("votes", 0)
+                b_v = (b_blk.get("parties") or {}).get(pc, {}).get("votes", 0)
+                a_share = (a_v / a_total) if a_total else 0
+                b_share = (b_v / b_total) if b_total else 0
+                if a_share == 0 and b_share == 0:
+                    continue
+                color = (b_blk.get("parties") or {}).get(pc, {}).get("color") or (
+                    a_blk.get("parties") or {}
+                ).get(pc, {}).get("color")
+                swings.append(
+                    {
+                        "state_code": sc,
+                        "state_name": (a_blk or b_blk).get("state_name"),
+                        "party_code": pc,
+                        "party_color": color,
+                        "share_a": a_share,
+                        "share_b": b_share,
+                        "delta": b_share - a_share,
+                    }
+                )
+        swings.sort(key=lambda s: abs(s["delta"]), reverse=True)
+        return jsonify({"cycle_a": a, "cycle_b": b, "type": etype, "swings": swings[:limit]})
 
 
 @bp.get("/timeline")
