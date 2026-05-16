@@ -123,18 +123,12 @@ export default function ElectionDetailPage() {
           </div>
 
           {data.standings.length === 0 ? (
-            <div className="text-sm text-dim border border-dashboard-border rounded p-4 space-y-2">
-              <p>No vote tallies for this election yet.</p>
-              <p className="text-xs">
-                INEC&apos;s IReV API exposes scanned EC8A result-sheet images, not parsed
-                vote counts. Numbers arrive in this dashboard via:
-              </p>
-              <ul className="text-xs list-disc pl-5 space-y-1">
-                <li>Curated historical CSVs (top-of-ticket races already loaded)</li>
-                <li>OCR pipeline over the EC8A scans (Phase D)</li>
-                <li>External datasets (Stears, Dataphyte) for state aggregates</li>
-              </ul>
-            </div>
+            <NoStandingsBlock
+              electionId={data.election.election_id}
+              cycle={data.election.cycle}
+              stateId={data.election.state_id}
+              electionType={data.election.election_type}
+            />
           ) : (
             <table className="w-full text-sm">
               <thead className="text-[11px] uppercase text-dim border-b border-dashboard-border">
@@ -225,6 +219,150 @@ export default function ElectionDetailPage() {
           <MethodologyDisclosure />
         </>
       )}
+    </div>
+  );
+}
+
+
+/* ----------------------------------------------------------------------- */
+/* Empty-state block: instead of a dead end, surface related useful data   */
+/* ----------------------------------------------------------------------- */
+
+interface RelatedElection {
+  election_id: number;
+  cycle: number;
+  election_type: string;
+  election_type_label: string;
+  state_id: number | null;
+  election_date: string | null;
+  has_data?: boolean;
+}
+
+function NoStandingsBlock({
+  electionId,
+  cycle,
+  stateId,
+  electionType,
+}: {
+  electionId: number;
+  cycle: number;
+  stateId: number | null;
+  electionType: string;
+}) {
+  // Get the state code for nav
+  const { data: states } = useApiData<{ state_id: number; code: string; name: string }[]>(
+    "/api/states",
+    5 * 60_000,
+  );
+  const state = stateId ? (states || []).find((s) => s.state_id === stateId) : null;
+
+  // Related races in the same state (any cycle/type) — pick a few that have data
+  const { data: stateRaces } = useApiData<RelatedElection[]>(
+    state ? `/api/elections?state=${state.code}` : null,
+    60_000,
+  );
+  const { data: cycleRaces } = useApiData<RelatedElection[]>(
+    `/api/elections?cycle=${cycle}`,
+    60_000,
+  );
+
+  // We don't know which have data without querying each; cap the list and
+  // let the user click through.
+  const sameState = (stateRaces || []).filter((e) => e.election_id !== electionId).slice(0, 6);
+  const sameCycle = (cycleRaces || [])
+    .filter((e) => e.election_id !== electionId && e.election_type !== electionType)
+    .slice(0, 6);
+
+  const dropCsvCommand = `# In backend/data/historical/, drop a CSV with columns:
+#   state_code, party_code, votes, candidate_name, is_incumbent
+# Add an entry to seed_historical.DATASETS pointing at it, then re-deploy.
+python -m app.importer.cli load \\
+  --file data/historical/${cycle}_${electionType}_state.csv \\
+  --cycle ${cycle} --type ${electionType} --aggregation state \\
+  --source curated_${cycle}_${electionType}`;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-dashboard-border bg-dashboard-card p-4 space-y-2">
+        <div className="flex items-baseline gap-2">
+          <span className="inline-block w-2 h-2 rounded-full bg-accent-orange animate-pulse" />
+          <h3 className="font-bold text-primary text-sm">No vote tallies for this race yet</h3>
+        </div>
+        <p className="text-xs text-dim">
+          INEC&apos;s IReV API exposes scanned EC8A result-sheet images for this election but no
+          parsed vote tallies. The daemon will ingest them once they appear in IReV&apos;s
+          per-PU JSON, or we can drop a curated CSV.
+        </p>
+      </div>
+
+      {state && sameState.length > 0 && (
+        <section>
+          <h3 className="text-xs uppercase tracking-wider text-dim font-bold mb-2">
+            Other races in {state.name}
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {sameState.map((e) => (
+              <Link
+                key={e.election_id}
+                href={`/elections/${e.election_id}`}
+                className="rounded border border-dashboard-border bg-dashboard-card hover:border-accent-green/40 hover:bg-dashboard-card-hover transition-all p-3 text-sm"
+              >
+                <div className="font-semibold text-primary">{e.election_type_label}</div>
+                <div className="text-[11px] text-dim">
+                  {e.cycle} · {e.election_date || "date unknown"}
+                </div>
+              </Link>
+            ))}
+          </div>
+          <Link
+            href={`/states/${state.code}`}
+            className="text-xs text-accent-green underline mt-2 inline-block"
+          >
+            All {state.name} races →
+          </Link>
+        </section>
+      )}
+
+      {sameCycle.length > 0 && (
+        <section>
+          <h3 className="text-xs uppercase tracking-wider text-dim font-bold mb-2">
+            Other {cycle} races
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {sameCycle.map((e) => (
+              <Link
+                key={e.election_id}
+                href={`/elections/${e.election_id}`}
+                className="rounded border border-dashboard-border bg-dashboard-card hover:border-accent-green/40 hover:bg-dashboard-card-hover transition-all p-3 text-sm"
+              >
+                <div className="font-semibold text-primary">{e.election_type_label}</div>
+                <div className="text-[11px] text-dim">
+                  state {e.state_id ?? "national"} · {e.election_date || "—"}
+                </div>
+              </Link>
+            ))}
+          </div>
+          <Link
+            href={`/cycles/${cycle}`}
+            className="text-xs text-accent-green underline mt-2 inline-block"
+          >
+            All {cycle} races →
+          </Link>
+        </section>
+      )}
+
+      <details className="rounded border border-dashboard-border bg-dashboard-card p-3">
+        <summary className="text-xs font-bold text-primary cursor-pointer">
+          How to add this data
+        </summary>
+        <p className="text-xs text-dim mt-2 mb-2">
+          The data plane accepts CSVs directly. Drop a file and re-deploy — the seed
+          loader picks it up idempotently.
+        </p>
+        <pre className="text-[10px] bg-black/40 p-2 rounded overflow-x-auto font-mono text-dim">
+{dropCsvCommand}
+        </pre>
+      </details>
     </div>
   );
 }
