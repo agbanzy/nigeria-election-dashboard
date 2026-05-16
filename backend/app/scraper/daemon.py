@@ -103,26 +103,31 @@ def _run_iteration(client: IrevClient, cfg: Config) -> int:
         depth,
     )
 
+    burst = max(1.0, cfg.scraper_burst_factor)
+
     if decision.mode == "live":
-        # Aggressive sync — every cycle, push targets through structure+stats.
+        budget = int(30 * burst)
         with session_scope() as session:
-            counters = sync.tick(session, client, max_api_calls=30)
-        log.info("daemon: live tick %s", counters)
+            counters = sync.tick(session, client, max_api_calls=budget)
+        log.info("daemon: live tick %s (burst=%s)", counters, burst)
     elif decision.mode == "preflight":
+        budget = int(15 * burst)
         with session_scope() as session:
-            counters = sync.tick(session, client, max_api_calls=15)
-        log.info("daemon: preflight tick %s", counters)
+            counters = sync.tick(session, client, max_api_calls=budget)
+        log.info("daemon: preflight tick %s (burst=%s)", counters, burst)
     else:
-        # Idle — drain the queue politely. 20 calls per cycle, 30 min cycle =
-        # 40 calls/hour, ~960 calls/day. Plenty for ~400 elections over a
-        # week or two without hammering INEC.
+        # Idle — drain the queue. Defaults to 20 calls per 30 min cycle
+        # (~960 calls/day). With SCRAPER_BURST_FACTOR=5 → 100 calls per 6 min
+        # cycle = 24,000 calls/day, draining all ~400 elections × 10 calls
+        # in <1 day.
         if depth["pending_total"] > 0:
+            budget = int(20 * burst)
             with session_scope() as session:
-                counters = sync.tick(session, client, max_api_calls=20)
-            log.info("daemon: idle tick %s", counters)
-            # When idle but we have queue work, shorten the sleep so backfill
-            # doesn't take literal days.
-            return min(decision.interval_seconds, 1800)  # 30 min
+                counters = sync.tick(session, client, max_api_calls=budget)
+            log.info("daemon: idle tick %s (burst=%s)", counters, burst)
+            # Shorten sleep proportional to burst factor.
+            sleep = max(60, int(1800 / burst))
+            return min(decision.interval_seconds, sleep)
 
     return decision.interval_seconds
 
