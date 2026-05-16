@@ -113,31 +113,46 @@ def coverage():
         ) or 0
 
         # ─── per-cycle coverage ──────────────────────────────────────────
-        per_cycle = session.execute(
-            select(
-                Election.cycle,
-                func.count(Election.election_id),
-                func.count(distinct(ElectionResult.election_id)),
-            )
-            .outerjoin(
-                ElectionResult, ElectionResult.election_id == Election.election_id
-            )
-            .group_by(Election.cycle)
-            .order_by(Election.cycle.desc())
-        ).all()
+        # Two separate queries to avoid the outer-join inflating counts.
+        per_cycle_total = dict(
+            session.execute(
+                select(Election.cycle, func.count(Election.election_id))
+                .group_by(Election.cycle)
+            ).all()
+        )
+        per_cycle_with_data = dict(
+            session.execute(
+                select(Election.cycle, func.count(distinct(Election.election_id)))
+                .join(ElectionResult, ElectionResult.election_id == Election.election_id)
+                .group_by(Election.cycle)
+            ).all()
+        )
+        per_cycle = sorted(
+            [
+                (c, per_cycle_total[c], per_cycle_with_data.get(c, 0))
+                for c in per_cycle_total
+            ],
+            key=lambda r: -r[0],
+        )
 
         # ─── per-type coverage ───────────────────────────────────────────
-        per_type = session.execute(
-            select(
-                Election.election_type,
-                func.count(Election.election_id),
-                func.count(distinct(ElectionResult.election_id)),
-            )
-            .outerjoin(
-                ElectionResult, ElectionResult.election_id == Election.election_id
-            )
-            .group_by(Election.election_type)
-        ).all()
+        per_type_total = dict(
+            session.execute(
+                select(Election.election_type, func.count(Election.election_id))
+                .group_by(Election.election_type)
+            ).all()
+        )
+        per_type_with_data = dict(
+            session.execute(
+                select(Election.election_type, func.count(distinct(Election.election_id)))
+                .join(ElectionResult, ElectionResult.election_id == Election.election_id)
+                .group_by(Election.election_type)
+            ).all()
+        )
+        per_type = [
+            (t, per_type_total[t], per_type_with_data.get(t, 0))
+            for t in per_type_total
+        ]
 
         # ─── per-state coverage (does the state appear in any election_results?) ─
         states_with_data = session.scalar(
