@@ -1,6 +1,7 @@
-"""One-time POST_DEPLOY script: seed dashboard auth users.
+"""POST_DEPLOY script: seed/refresh dashboard auth users.
 
-Idempotent — skips users that already exist by email.
+Upsert by email — creates missing users and updates name/role/password for
+existing ones, so changing a password here and redeploying takes effect.
 Run: python -m app.seed_users
 """
 
@@ -19,13 +20,13 @@ USERS = [
         "email": "godwin@innoedgetech.com",
         "name": "Godwin Agbane",
         "role": "admin",
-        "password_hash": "$2b$12$46Ow9PHrTkXn6oQ0dbuWUOAtIFxRR8yVrzjJbFJeETCyc/3VA8dRC",
+        "password_hash": "$2b$12$Bbs68.caSBebuh.LMkVueeEtgoCRpNLparPylzFkvKbYBzcA/wNOK",
     },
     {
         "email": "ekitigov@elections.innoedgetech.com",
         "name": "EkitiGov",
         "role": "viewer",
-        "password_hash": "$2b$12$gx8aEv86urRyoELuP.rPVuNc5lpXcnuBFZpJw3icl.x/Dm9l80Pki",
+        "password_hash": "$2b$12$.pRPeF8PjK1mIgGiV8iWdeyqJU8FE7Q4KV1mw/VKOw7nlwvAJGkZ6",
     },
 ]
 
@@ -38,18 +39,22 @@ def main() -> None:
         for u in USERS:
             existing = session.scalar(select(User).where(User.email == u["email"]))
             if existing:
-                print(f"  skip {u['email']} (already exists)")
-                continue
-            session.add(
-                User(
-                    email=u["email"],
-                    name=u["name"],
-                    role=u["role"],
-                    password_hash=u["password_hash"],
-                    is_active=True,
+                existing.name = u["name"]
+                existing.role = u["role"]
+                existing.password_hash = u["password_hash"]
+                existing.is_active = True
+                print(f"  updated {u['email']} (role={u['role']})")
+            else:
+                session.add(
+                    User(
+                        email=u["email"],
+                        name=u["name"],
+                        role=u["role"],
+                        password_hash=u["password_hash"],
+                        is_active=True,
+                    )
                 )
-            )
-            print(f"  created {u['email']} (role={u['role']})")
+                print(f"  created {u['email']} (role={u['role']})")
 
     print("seed_users done.")
 
