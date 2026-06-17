@@ -111,10 +111,11 @@ databases:
   - name: db
     engine: PG
     version: "16"
-    # Reusing an existing managed cluster (user-authorized via AskUserQuestion).
-    # App Platform creates a new database within the cluster, with the app role
-    # as its owner — full rights on its own DB, no PG public-schema gotchas.
-    cluster_name: unimarket-staging-pg
+    # Reusing the apcng-db managed cluster (user-authorized via AskUserQuestion
+    # 2026-06-17, after the account hit its cluster cap). App Platform creates a
+    # dedicated database + owner role within the cluster — full DDL rights on its
+    # own DB, no PG public-schema gotchas. apcng's own data is isolated.
+    cluster_name: apcng-db
     production: true
 
 jobs:
@@ -168,6 +169,19 @@ jobs:
     source_dir: backend
     build_command: pip install -r requirements.txt
     run_command: python -m app.importer.loaders.seed_historical
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
+  # Seed dashboard auth users (idempotent — skips users that already exist).
+  - name: seed-users
+    kind: POST_DEPLOY
+    github:
+      repo: agbanzy/fct-election-dashboard
+      branch: main
+    source_dir: backend
+    build_command: pip install -r requirements.txt
+    run_command: python -m app.seed_users
     envs:
       - key: DATABASE_URL
         scope: RUN_TIME
