@@ -43,7 +43,10 @@ def run_migrations_online() -> None:
 
     log = logging.getLogger("alembic.runtime.migration")
 
-    preferred_schema = os.environ.get("DB_SCHEMA", "elections")
+    # DB_SCHEMA="" (the app default in db.py) means "use the role's default
+    # search_path". Migrations must follow the same default so they target the
+    # same schema the running app does.
+    preferred_schema = os.environ.get("DB_SCHEMA", "")
 
     config.set_main_option("sqlalchemy.url", _url())
     connectable = engine_from_config(
@@ -53,13 +56,11 @@ def run_migrations_online() -> None:
     )
     with connectable.connect() as connection:
         schema: str | None = None
-        if connection.dialect.name == "postgresql":
+        if connection.dialect.name == "postgresql" and preferred_schema:
             user = connection.execute(_text("SELECT current_user")).scalar()
-            log.info("alembic: connected as user=%s", user)
+            log.info("alembic: connected as user=%s preferred_schema=%s", user, preferred_schema)
 
-            # Strategy 1: use preferred schema if it already exists (regardless of
-            # whether the current role owns it — the role just needs table-level
-            # privileges, which DO grants automatically).
+            # Strategy 1: use preferred schema if it already exists.
             already_exists = connection.execute(
                 _text("SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = :s)"),
                 {"s": preferred_schema},
@@ -84,7 +85,7 @@ def run_migrations_online() -> None:
                     schema = writable[0][0]
                     log.info("alembic: using schema with CREATE privilege=%s", schema)
                 else:
-                    # Strategy 3: try to create our preferred schema (needs CREATE on db).
+                    # Strategy 3: try to create our preferred schema.
                     try:
                         connection.execute(
                             _text(f'CREATE SCHEMA IF NOT EXISTS "{preferred_schema}" AUTHORIZATION CURRENT_USER')
@@ -94,15 +95,12 @@ def run_migrations_online() -> None:
                         log.info("alembic: created schema=%s", schema)
                     except Exception as exc:
                         connection.rollback()
-                        log.error("alembic: cannot create schema %r: %s", preferred_schema, exc)
-                        raise RuntimeError(
-                            f"Postgres role {user!r} has no CREATE privilege on any schema and cannot "
-                            f"create new ones. Grant CREATE on the database, or pre-create the "
-                            f"{preferred_schema!r} schema owned by this role via the DO console."
-                        ) from exc
+                        log.warning("alembic: cannot create schema %r (%s) — falling back to default search_path", preferred_schema, exc)
+                        schema = None  # fall through to default search_path
 
-            connection.execute(_text(f'SET search_path TO "{schema}", public'))
-            connection.commit()
+            if schema:
+                connection.execute(_text(f'SET search_path TO "{schema}", public'))
+                connection.commit()
 
         context.configure(
             connection=connection,
