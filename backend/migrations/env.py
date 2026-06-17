@@ -35,6 +35,98 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _resolve_schema(connection, preferred_schema, log):
+    """Decide which schema migrations should target, with full diagnostics.
+
+    DO App Platform dev databases hand the app a non-owner role. Over time DO
+    has tightened defaults so the role may have DML on existing tables (the app
+    works) but no CREATE on any schema (migrations break). This routine logs the
+    exact privilege picture and picks the most sensible target:
+
+      1. An explicit DB_SCHEMA env override that the role can CREATE in.
+      2. The schema where the app's existing tables already live (if the role
+         can CREATE there — it usually can, since it created them originally).
+      3. Any schema the role can CREATE in (prefer one named after the role).
+      4. Attempt to create the preferred schema.
+      5. Give up and let the default search_path apply (logged as an error so
+         the failure is actionable).
+    """
+    from sqlalchemy import text as _text
+
+    user = connection.execute(_text("SELECT current_user")).scalar()
+    db = connection.execute(_text("SELECT current_database()")).scalar()
+    search_path = connection.execute(_text("SHOW search_path")).scalar()
+    log.info("alembic-diag: user=%s database=%s search_path=%s", user, db, search_path)
+
+    # Where do existing app tables live? 'states' is created by migration 0001.
+    existing = connection.execute(
+        _text(
+            "SELECT table_schema, count(*) FROM information_schema.tables "
+            "WHERE table_name IN ('states','elections','election_results','alembic_version') "
+            "GROUP BY table_schema"
+        )
+    ).fetchall()
+    log.info("alembic-diag: existing app tables by schema: %s", [(r[0], r[1]) for r in existing])
+
+    # Privilege picture across all non-system schemas.
+    privs = connection.execute(
+        _text(
+            "SELECT n.nspname, "
+            "has_schema_privilege(current_user, n.nspname, 'CREATE') AS can_create, "
+            "has_schema_privilege(current_user, n.nspname, 'USAGE') AS can_use, "
+            "pg_get_userbyid(n.nspowner) AS owner "
+            "FROM pg_namespace n "
+            "WHERE n.nspname NOT IN ('pg_catalog','information_schema','pg_toast') "
+            "ORDER BY n.nspname"
+        )
+    ).fetchall()
+    for r in privs:
+        log.info("alembic-diag: schema=%s create=%s usage=%s owner=%s", r[0], r[1], r[2], r[3])
+
+    creatable = [r[0] for r in privs if r[1]]
+    tables_schema = existing[0][0] if existing else None
+
+    # Strategy 1: explicit override the role can write to.
+    if preferred_schema and preferred_schema in creatable:
+        log.info("alembic: using DB_SCHEMA override=%s", preferred_schema)
+        return preferred_schema
+
+    # Strategy 2: the schema the app's tables already live in (keeps everything
+    # together) — but only if the role can CREATE there.
+    if tables_schema and tables_schema in creatable:
+        log.info("alembic: using existing-tables schema=%s", tables_schema)
+        return tables_schema
+
+    # Strategy 3: any creatable schema, preferring one named after the role.
+    if creatable:
+        creatable.sort(key=lambda s: (s != user, s != preferred_schema, s))
+        log.info("alembic: using creatable schema=%s (options=%s)", creatable[0], creatable)
+        return creatable[0]
+
+    # Strategy 4: try to create the preferred schema (needs CREATE on database).
+    target = preferred_schema or "elections"
+    try:
+        connection.execute(
+            _text(f'CREATE SCHEMA IF NOT EXISTS "{target}" AUTHORIZATION CURRENT_USER')
+        )
+        connection.commit()
+        log.info("alembic: created schema=%s", target)
+        return target
+    except Exception as exc:
+        connection.rollback()
+        log.error(
+            "alembic: role %r cannot CREATE in any schema and cannot create new ones (%s). "
+            "Existing app tables are in schema %r. Grant CREATE to this role on that schema "
+            "(GRANT CREATE ON SCHEMA %s TO %s) from a privileged DB user, or point DATABASE_URL "
+            "at a managed cluster where this role owns its schema.",
+            user, exc, tables_schema, tables_schema or "public", user,
+        )
+        # If existing tables live somewhere, target that schema anyway — the
+        # CREATE will fail loudly with the actionable message above, but at
+        # least we won't silently scatter into the wrong schema.
+        return tables_schema
+
+
 def run_migrations_online() -> None:
     import logging
     import os
@@ -56,48 +148,8 @@ def run_migrations_online() -> None:
     )
     with connectable.connect() as connection:
         schema: str | None = None
-        if connection.dialect.name == "postgresql" and preferred_schema:
-            user = connection.execute(_text("SELECT current_user")).scalar()
-            log.info("alembic: connected as user=%s preferred_schema=%s", user, preferred_schema)
-
-            # Strategy 1: use preferred schema if it already exists.
-            already_exists = connection.execute(
-                _text("SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = :s)"),
-                {"s": preferred_schema},
-            ).scalar()
-            if already_exists:
-                schema = preferred_schema
-                log.info("alembic: schema %r already exists, using it", schema)
-            else:
-                # Strategy 2: pick any schema the role can CREATE in.
-                writable = connection.execute(
-                    _text(
-                        "SELECT n.nspname FROM pg_namespace n "
-                        "WHERE has_schema_privilege(current_user, n.nspname, 'CREATE') "
-                        "AND n.nspname NOT IN ('pg_catalog','information_schema','pg_toast') "
-                        "ORDER BY (n.nspname = current_user) DESC, (n.nspname = :pref) DESC, n.nspname"
-                    ),
-                    {"pref": preferred_schema},
-                ).fetchall()
-                log.info("alembic: schemas user can CREATE in: %s", [r[0] for r in writable])
-
-                if writable:
-                    schema = writable[0][0]
-                    log.info("alembic: using schema with CREATE privilege=%s", schema)
-                else:
-                    # Strategy 3: try to create our preferred schema.
-                    try:
-                        connection.execute(
-                            _text(f'CREATE SCHEMA IF NOT EXISTS "{preferred_schema}" AUTHORIZATION CURRENT_USER')
-                        )
-                        connection.commit()
-                        schema = preferred_schema
-                        log.info("alembic: created schema=%s", schema)
-                    except Exception as exc:
-                        connection.rollback()
-                        log.warning("alembic: cannot create schema %r (%s) — falling back to default search_path", preferred_schema, exc)
-                        schema = None  # fall through to default search_path
-
+        if connection.dialect.name == "postgresql":
+            schema = _resolve_schema(connection, preferred_schema, log)
             if schema:
                 connection.execute(_text(f'SET search_path TO "{schema}", public'))
                 connection.commit()
