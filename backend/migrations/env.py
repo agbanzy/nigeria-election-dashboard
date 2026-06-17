@@ -57,39 +57,49 @@ def run_migrations_online() -> None:
             user = connection.execute(_text("SELECT current_user")).scalar()
             log.info("alembic: connected as user=%s", user)
 
-            # Strategy 1: pick any schema the role can CREATE in (DO's dev-tier
-            # auto-creates a per-app schema; doadmin can use any).
-            writable = connection.execute(
-                _text(
-                    "SELECT n.nspname FROM pg_namespace n "
-                    "WHERE has_schema_privilege(current_user, n.nspname, 'CREATE') "
-                    "AND n.nspname NOT IN ('pg_catalog','information_schema','pg_toast') "
-                    "ORDER BY (n.nspname = current_user) DESC, (n.nspname = :pref) DESC, n.nspname"
-                ),
-                {"pref": preferred_schema},
-            ).fetchall()
-            log.info("alembic: schemas user can CREATE in: %s", [r[0] for r in writable])
-
-            if writable:
-                schema = writable[0][0]
-                log.info("alembic: using existing schema=%s", schema)
+            # Strategy 1: use preferred schema if it already exists (regardless of
+            # whether the current role owns it — the role just needs table-level
+            # privileges, which DO grants automatically).
+            already_exists = connection.execute(
+                _text("SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname = :s)"),
+                {"s": preferred_schema},
+            ).scalar()
+            if already_exists:
+                schema = preferred_schema
+                log.info("alembic: schema %r already exists, using it", schema)
             else:
-                # Strategy 2: try to create our preferred schema (needs CREATE on db).
-                try:
-                    connection.execute(
-                        _text(f'CREATE SCHEMA IF NOT EXISTS "{preferred_schema}" AUTHORIZATION CURRENT_USER')
-                    )
-                    connection.commit()
-                    schema = preferred_schema
-                    log.info("alembic: created schema=%s", schema)
-                except Exception as exc:
-                    connection.rollback()
-                    log.error("alembic: cannot create schema %r: %s", preferred_schema, exc)
-                    raise RuntimeError(
-                        f"Postgres role {user!r} has no CREATE privilege on any schema and cannot "
-                        f"create new ones. Grant CREATE on the database, or pre-create the "
-                        f"{preferred_schema!r} schema owned by this role via the DO console."
-                    ) from exc
+                # Strategy 2: pick any schema the role can CREATE in.
+                writable = connection.execute(
+                    _text(
+                        "SELECT n.nspname FROM pg_namespace n "
+                        "WHERE has_schema_privilege(current_user, n.nspname, 'CREATE') "
+                        "AND n.nspname NOT IN ('pg_catalog','information_schema','pg_toast') "
+                        "ORDER BY (n.nspname = current_user) DESC, (n.nspname = :pref) DESC, n.nspname"
+                    ),
+                    {"pref": preferred_schema},
+                ).fetchall()
+                log.info("alembic: schemas user can CREATE in: %s", [r[0] for r in writable])
+
+                if writable:
+                    schema = writable[0][0]
+                    log.info("alembic: using schema with CREATE privilege=%s", schema)
+                else:
+                    # Strategy 3: try to create our preferred schema (needs CREATE on db).
+                    try:
+                        connection.execute(
+                            _text(f'CREATE SCHEMA IF NOT EXISTS "{preferred_schema}" AUTHORIZATION CURRENT_USER')
+                        )
+                        connection.commit()
+                        schema = preferred_schema
+                        log.info("alembic: created schema=%s", schema)
+                    except Exception as exc:
+                        connection.rollback()
+                        log.error("alembic: cannot create schema %r: %s", preferred_schema, exc)
+                        raise RuntimeError(
+                            f"Postgres role {user!r} has no CREATE privilege on any schema and cannot "
+                            f"create new ones. Grant CREATE on the database, or pre-create the "
+                            f"{preferred_schema!r} schema owned by this role via the DO console."
+                        ) from exc
 
             connection.execute(_text(f'SET search_path TO "{schema}", public'))
             connection.commit()
