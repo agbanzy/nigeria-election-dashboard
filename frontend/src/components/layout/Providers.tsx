@@ -1,6 +1,8 @@
 "use client";
 
 import { Suspense } from "react";
+import { SessionProvider } from "next-auth/react";
+import { usePathname } from "next/navigation";
 
 import { DashboardProvider, useDashboard } from "@/context/DashboardContext";
 import { ThemeProvider } from "@/context/ThemeContext";
@@ -11,6 +13,9 @@ import Header from "@/components/layout/Header";
 import ConnectionBanner from "@/components/shared/ConnectionBanner";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { cn } from "@/lib/utils";
+
+// Routes that render without the dashboard shell
+const PUBLIC_ROUTES = new Set(["/", "/login"]);
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
   const { isFullscreen, isOnline, sseConnected } = useDashboard();
@@ -34,17 +39,34 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function Providers({ children }: { children: React.ReactNode }) {
+function ConditionalShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+
+  if (PUBLIC_ROUTES.has(pathname)) {
+    return <>{children}</>;
+  }
+
   return (
-    <ThemeProvider>
-      <DashboardProvider>
-        {/* FilterProvider uses useSearchParams which requires Suspense in App Router */}
-        <Suspense fallback={null}>
-          <FilterProvider>
-            <DashboardShell>{children}</DashboardShell>
-          </FilterProvider>
-        </Suspense>
-      </DashboardProvider>
-    </ThemeProvider>
+    <DashboardProvider>
+      <Suspense fallback={null}>
+        <FilterProvider>
+          <DashboardShell>{children}</DashboardShell>
+        </FilterProvider>
+      </Suspense>
+    </DashboardProvider>
+  );
+}
+
+export default function Providers({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <SessionProvider>
+      <ThemeProvider>
+        <ConditionalShell>{children}</ConditionalShell>
+      </ThemeProvider>
+    </SessionProvider>
   );
 }

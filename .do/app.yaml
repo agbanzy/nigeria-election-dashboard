@@ -55,6 +55,17 @@ services:
       - key: NEXT_PUBLIC_API_URL
         scope: BUILD_TIME
         value: ""
+      - key: API_URL
+        scope: RUN_TIME
+        # Internal service-to-service URL — Next.js credentials provider calls
+        # Flask directly (server-side), bypassing the public routing layer.
+        value: http://web:8080
+      - key: NEXTAUTH_URL
+        scope: RUN_TIME
+        value: https://elections.innoedgetech.com
+      # NEXTAUTH_SECRET: set via DO console or doctl — never commit the value.
+      # Generate: openssl rand -base64 32
+      # Set: doctl apps update <app-id> --spec updated-spec-with-secret.yaml
       - key: PORT
         scope: RUN_TIME
         value: "3000"

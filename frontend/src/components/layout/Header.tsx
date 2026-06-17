@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { signOut, useSession } from "next-auth/react";
 import {
   ArrowsPointingInIcon,
   ArrowsPointingOutIcon,
+  ArrowRightOnRectangleIcon,
   MoonIcon,
   SpeakerWaveIcon,
   SpeakerXMarkIcon,
@@ -28,6 +30,7 @@ interface CalendarHint {
 }
 
 export default function Header() {
+  const { data: session } = useSession();
   const { data: states } = useApiData<StateRow[]>("/api/states", 5 * 60_000);
   const { data: nextEvent } = useApiData<CalendarHint | null>("/api/calendar/next", 60_000);
   const { time, date } = useLiveClock();
@@ -127,6 +130,22 @@ export default function Header() {
               <ArrowsPointingOutIcon className="w-4 h-4" />
             )}
           </button>
+
+          {session?.user && (
+            <div className="hidden sm:flex items-center gap-2 ml-1 pl-3 border-l border-white/10">
+              <span className="text-[12px] text-white/50 max-w-[120px] truncate">
+                {session.user.name || session.user.email}
+              </span>
+              <button
+                onClick={() => signOut({ callbackUrl: "/" })}
+                aria-label="Sign out"
+                title="Sign out"
+                className="p-1.5 rounded-lg text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-all"
+              >
+                <ArrowRightOnRectangleIcon className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

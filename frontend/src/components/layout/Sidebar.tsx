@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { signOut, useSession } from "next-auth/react";
 import {
+  ArrowRightOnRectangleIcon,
   Bars3Icon,
   BoltIcon,
   ChartBarIcon,
@@ -31,7 +33,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { name: "Overview", href: "/", icon: HomeIcon },
+  { name: "Overview", href: "/dashboard", icon: HomeIcon },
   { name: "States", href: "/states", icon: MapIcon },
   { name: "Elections", href: "/elections", icon: ChartBarIcon },
   { name: "Candidates", href: "/candidates", icon: UsersIcon },
@@ -47,6 +49,7 @@ export default function Sidebar() {
   const [open, setOpen] = useState(false);
   const { date } = useLiveClock();
   const { theme, toggleTheme } = useTheme();
+  const { data: session } = useSession();
 
   return (
     <>
@@ -90,10 +93,7 @@ export default function Sidebar() {
 
         <nav className="flex-1 p-3 space-y-1">
           {NAV_ITEMS.map((item) => {
-            const active =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href);
+            const active = pathname.startsWith(item.href);
             return (
               <Link
                 key={item.href}
@@ -153,6 +153,22 @@ export default function Sidebar() {
             </div>
             <div className="text-[10px] text-dim mt-0.5">{POWERED_BY_TAGLINE}</div>
           </a>
+
+          {session?.user && (
+            <div className="border-t border-dashboard-border pt-3">
+              <div className="px-1 mb-2">
+                <p className="text-[11px] text-dim truncate">{session.user.email}</p>
+                <p className="text-[10px] text-white/25 capitalize">{(session.user as { role?: string }).role ?? "viewer"}</p>
+              </div>
+              <button
+                onClick={() => signOut({ callbackUrl: "/" })}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-semibold text-dim hover:text-red-400 hover:bg-red-500/10 transition-all"
+              >
+                <ArrowRightOnRectangleIcon className="w-4 h-4" />
+                Sign out
+              </button>
+            </div>
+          )}
 
           <div className="text-[10px] text-dim">
             <p>INEC IReV + curated datasets</p>

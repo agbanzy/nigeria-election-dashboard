@@ -1,186 +1,83 @@
 "use client";
 
 /**
- * National overview. Adapts to active filter scope.
- *
- * Reads from `/api/overview` (filtered when state/cycle set), renders the
- * countdown widget, key stat cards, the choropleth state grid, recent
- * elections, and per-cycle/per-type breakdowns with bar charts.
+ * Public landing page — shows the Nigeria election choropleth map only.
+ * No sidebar, no dashboard shell. Login to access full analytics.
  */
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { BRAND_NAME, BRAND_TAGLINE, POWERED_BY, POWERED_BY_URL } from "@/lib/branding";
 
-import AnimatedCounter from "@/components/shared/AnimatedCounter";
-import ElectionCountdown from "@/components/shared/ElectionCountdown";
-import MethodologyDisclosure from "@/components/shared/MethodologyDisclosure";
-import NigeriaChoropleth from "@/components/shared/NigeriaChoropleth";
-import StatCard from "@/components/shared/StatCard";
-import { useFilters } from "@/context/FilterContext";
-import { useApiData } from "@/hooks/useApiData";
-import type { StateRow } from "@/lib/api";
-import { ELECTION_LABELS, type ElectionType } from "@/lib/electionTypeConfig";
-import { formatNumber } from "@/lib/utils";
+// NigeriaLeafletMap requires browser APIs — disable SSR
+const NigeriaChoropleth = dynamic(
+  () => import("@/components/shared/NigeriaChoropleth"),
+  { ssr: false, loading: () => <div className="h-full flex items-center justify-center text-white/30 text-sm">Loading map…</div> }
+);
 
-interface OverviewResponse {
-  scope: string;
-  cycle: number | null;
-  totals: { states: number; lgas: number; elections: number };
-  cycles: { cycle: number; elections: number }[];
-  election_types: { type: string; count: number }[];
-  recent_elections: {
-    election_id: number;
-    cycle: number;
-    type: string;
-    state_id: number | null;
-    date: string | null;
-    status: string;
-  }[];
-}
-
-export default function HomePage() {
-  const { state, cycle } = useFilters();
-  const qs = new URLSearchParams();
-  if (state) qs.set("state", state);
-  if (cycle) qs.set("cycle", String(cycle));
-  const path = `/api/overview${qs.toString() ? `?${qs}` : ""}`;
-  const { data: overview, error } = useApiData<OverviewResponse>(path, 60_000);
-  const { data: states } = useApiData<StateRow[]>("/api/states", 5 * 60_000);
-  const stateById = new Map((states || []).map((s) => [s.state_id, s] as const));
-
-  const cycleChartData = (overview?.cycles || [])
-    .slice()
-    .sort((a, b) => a.cycle - b.cycle)
-    .map((c) => ({ name: String(c.cycle), elections: c.elections }));
-
-  const typeChartData = (overview?.election_types || []).map((t) => ({
-    name: ELECTION_LABELS[t.type as ElectionType] || t.type,
-    count: t.count,
-  }));
-
+export default function LandingPage() {
   return (
-    <div className="space-y-6">
-      {error && (
-        <div className="bg-accent-red/10 border border-accent-red/30 rounded-xl px-4 py-3 text-[13px] text-accent-red">
-          Failed to load overview. Retrying…
-        </div>
-      )}
+    <div className="min-h-screen bg-[#070d1a] flex flex-col">
+      {/* Background grid */}
+      <div
+        className="fixed inset-0 opacity-[0.03] pointer-events-none"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(16,185,129,1) 1px, transparent 1px), linear-gradient(90deg, rgba(16,185,129,1) 1px, transparent 1px)",
+          backgroundSize: "40px 40px",
+        }}
+      />
 
-      <ElectionCountdown />
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard
-          label="States covered"
-          value={overview ? <AnimatedCounter value={overview.totals.states} /> : "—"}
-          sub="of 36 + FCT"
-          color="#3b82f6"
-        />
-        <StatCard
-          label="LGAs covered"
-          value={overview ? <AnimatedCounter value={overview.totals.lgas} /> : "—"}
-          sub="of 774"
-          color="#10b981"
-        />
-        <StatCard
-          label="Elections on record"
-          value={overview ? <AnimatedCounter value={overview.totals.elections} /> : "—"}
-          sub="across all cycles"
-          color="#a78bfa"
-        />
-        <StatCard
-          label="Distinct cycles"
-          value={overview ? <AnimatedCounter value={overview.cycles.length} /> : "—"}
-          sub={
-            overview && overview.cycles.length
-              ? `${Math.min(...overview.cycles.map((c) => c.cycle))}–${Math.max(
-                  ...overview.cycles.map((c) => c.cycle),
-                )}`
-              : "—"
-          }
-          color="#fbbf24"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <section className="rounded-lg border border-dashboard-border bg-dashboard-card p-4">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-dim mb-2">
-            Elections by cycle
-          </h3>
-          {cycleChartData.length === 0 ? (
-            <div className="text-sm text-dim italic">No cycle data yet.</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={cycleChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="name" stroke="#6b7280" fontSize={11} />
-                <YAxis stroke="#6b7280" fontSize={11} />
-                <Tooltip contentStyle={{ background: "#0c1226", border: "1px solid #1f2538" }} />
-                <Bar dataKey="elections" fill="#10b981" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </section>
-
-        <section className="rounded-lg border border-dashboard-border bg-dashboard-card p-4">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-dim mb-2">
-            By election type
-          </h3>
-          {typeChartData.length === 0 ? (
-            <div className="text-sm text-dim italic">No type data yet.</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={typeChartData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis type="number" stroke="#6b7280" fontSize={11} />
-                <YAxis type="category" dataKey="name" stroke="#6b7280" fontSize={10} width={140} />
-                <Tooltip contentStyle={{ background: "#0c1226", border: "1px solid #1f2538" }} />
-                <Bar dataKey="count" fill="#3b82f6" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </section>
-      </div>
-
-      <NigeriaChoropleth />
-
-      <section>
-        <h2 className="text-sm font-bold uppercase tracking-wider text-dim mb-2">
-          Recent elections
-        </h2>
-        {overview && overview.recent_elections.length === 0 && (
-          <div className="text-sm text-dim italic">
-            No elections ingested yet. The daemon is syncing now.
+      {/* Minimal header */}
+      <header className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-white/[0.06]">
+        <div className="flex items-center gap-3">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-[#00a651]" />
+            <span className="w-5 h-0.5 bg-[#00a651]/60" />
+            <span className="w-1.5 h-1.5 rounded-full bg-[#008751]" />
+          </span>
+          <div>
+            <h1 className="text-sm font-extrabold text-white tracking-tight leading-none">
+              {BRAND_NAME}
+            </h1>
+            <p className="text-[10px] text-white/35 mt-0.5 hidden sm:block">{BRAND_TAGLINE}</p>
           </div>
-        )}
-        <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {(overview?.recent_elections || []).map((e) => {
-            const s = e.state_id ? stateById.get(e.state_id) : null;
-            return (
-              <li
-                key={e.election_id}
-                className="rounded border border-dashboard-border bg-dashboard-card px-3 py-2 text-sm flex items-center justify-between"
-              >
-                <div>
-                  <div className="font-semibold text-primary">
-                    {ELECTION_LABELS[e.type as ElectionType] || e.type} · {e.cycle}
-                  </div>
-                  <div className="text-[11px] text-dim">
-                    {s ? s.name : e.state_id ? `state #${e.state_id}` : "National"} ·{" "}
-                    {e.date || "date unknown"} · {e.status}
-                  </div>
-                </div>
-                <Link
-                  href={`/elections/${e.election_id}`}
-                  className="text-xs text-accent-green underline"
-                >
-                  view →
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-        <MethodologyDisclosure />
-      </section>
+        </div>
+
+        <Link
+          href="/login"
+          className="px-4 py-2 rounded-lg bg-[#00a651] hover:bg-[#008741] text-white text-[13px] font-bold transition-all duration-150 shadow-lg shadow-[#00a651]/20"
+        >
+          Sign in
+        </Link>
+      </header>
+
+      {/* Hero text */}
+      <div className="relative z-10 text-center pt-10 pb-4 px-4">
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+          Nigeria Election Results
+        </h2>
+        <p className="text-[13px] text-white/40 mt-2 max-w-md mx-auto">
+          Pan-Nigeria, multi-cycle results, analysis and live data from INEC IReV.
+          <br className="hidden sm:block" /> Sign in to explore the full dashboard.
+        </p>
+      </div>
+
+      {/* Map — fills the rest of the viewport */}
+      <div className="relative z-10 flex-1 px-4 pb-4 min-h-[500px]">
+        <div className="h-full rounded-2xl overflow-hidden border border-white/[0.08] bg-[#0c1226]" style={{ minHeight: 480 }}>
+          <NigeriaChoropleth />
+        </div>
+      </div>
+
+      {/* Footer */}
+      <footer className="relative z-10 text-center py-4 text-[11px] text-white/20 border-t border-white/[0.05]">
+        Powered by{" "}
+        <a href={POWERED_BY_URL} className="text-white/35 hover:text-white/55 underline transition-colors">
+          {POWERED_BY}
+        </a>{" "}
+        · Data source: INEC IReV
+      </footer>
     </div>
   );
 }
