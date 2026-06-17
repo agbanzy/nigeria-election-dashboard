@@ -55,17 +55,14 @@ services:
       - key: NEXT_PUBLIC_API_URL
         scope: BUILD_TIME
         value: ""
-      - key: API_URL
-        scope: RUN_TIME
-        # Internal service-to-service URL — Next.js credentials provider calls
-        # Flask directly (server-side), bypassing the public routing layer.
-        value: http://web:8080
       - key: NEXTAUTH_URL
         scope: RUN_TIME
         value: https://elections.innoedgetech.com
-      # NEXTAUTH_SECRET: set via DO console or doctl — never commit the value.
-      # Generate: openssl rand -base64 32
-      # Set: doctl apps update <app-id> --spec updated-spec-with-secret.yaml
+      # NEXTAUTH_SECRET and AUTH_USERS are secrets — set via doctl/DO console,
+      # never committed.
+      #   NEXTAUTH_SECRET: openssl rand -base64 32
+      #   AUTH_USERS: JSON array of {email,name,role,passwordHash} (bcrypt hash).
+      #     NextAuth validates credentials against this list — no DB needed.
       - key: PORT
         scope: RUN_TIME
         value: "3000"
@@ -125,7 +122,11 @@ jobs:
       branch: main
     source_dir: backend
     build_command: pip install -r requirements.txt
-    run_command: alembic upgrade head
+    # Non-blocking: a migration failure (e.g. the dev-DB role lacking CREATE)
+    # must not gate the whole deploy. With no pending schema changes this is a
+    # no-op; env.py logs the DB privilege picture either way. Restore a strict
+    # `alembic upgrade head` once the DB role owns its schema (managed cluster).
+    run_command: alembic upgrade head || echo "migrate: non-fatal failure, continuing with existing schema"
     envs:
       - key: DATABASE_URL
         scope: RUN_TIME

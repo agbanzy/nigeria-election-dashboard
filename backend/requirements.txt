@@ -12,4 +12,3 @@ Pillow==11.1.0
 pytesseract==0.3.13
 numpy==2.2.3
 click==8.1.7
-bcrypt>=4.0.0

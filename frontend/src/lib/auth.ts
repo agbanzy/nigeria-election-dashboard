@@ -1,10 +1,31 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
 
-const API_URL =
-  process.env.API_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://127.0.0.1:8080";
+interface AuthUser {
+  email: string;
+  name: string;
+  role: string;
+  passwordHash: string;
+}
+
+/**
+ * Users are provisioned via the AUTH_USERS env var — a JSON array of
+ * { email, name, role, passwordHash } objects (passwordHash is a bcrypt hash).
+ * This keeps auth entirely in the Next.js server runtime with no database
+ * dependency. To add/remove a user, edit AUTH_USERS and redeploy.
+ */
+function loadUsers(): AuthUser[] {
+  const raw = process.env.AUTH_USERS;
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    console.error("AUTH_USERS is not valid JSON");
+    return [];
+  }
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -17,28 +38,19 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        try {
-          const res = await fetch(`${API_URL}/api/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              email: credentials.email,
-              password: credentials.password,
-            }),
-          });
+        const email = credentials.email.trim().toLowerCase();
+        const user = loadUsers().find((u) => u.email.toLowerCase() === email);
+        if (!user) return null;
 
-          if (!res.ok) return null;
+        const ok = await bcrypt.compare(credentials.password, user.passwordHash);
+        if (!ok) return null;
 
-          const user = await res.json();
-          return {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role,
-          };
-        } catch {
-          return null;
-        }
+        return {
+          id: user.email,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        };
       },
     }),
   ],

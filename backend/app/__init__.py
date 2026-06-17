@@ -31,7 +31,6 @@ def create_app(config: Config | None = None) -> Flask:
     # Register blueprints.
     from app.api import (
         analysis as analysis_api,
-        auth as auth_api,
         calendar as calendar_api,
         candidates,
         elections,
@@ -45,7 +44,6 @@ def create_app(config: Config | None = None) -> Flask:
         sync as sync_api,
     )
 
-    app.register_blueprint(auth_api.bp)
     app.register_blueprint(health.bp)
     app.register_blueprint(overview.bp)
     app.register_blueprint(calendar_api.bp)
