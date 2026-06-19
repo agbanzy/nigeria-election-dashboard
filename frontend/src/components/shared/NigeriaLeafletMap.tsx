@@ -107,6 +107,13 @@ export default function NigeriaLeafletMap({
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedCode;
 
+  useEffect(() => {
+    fetch("/ng-states.geojson")
+      .then((r) => r.json())
+      .then(setGeojson)
+      .catch(() => setGeojson(null));
+  }, []);
+
   const max = metricByState ? Math.max(0, ...Array.from(metricByState.values())) : 0;
 
   const baseStyle = (code: string): L.PathOptions => {
