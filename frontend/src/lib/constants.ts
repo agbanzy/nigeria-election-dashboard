@@ -31,11 +31,18 @@ export const CHART_TEXT_COLOR = "#6b7280";
 export const REFRESH_INTERVAL = 15000; // 15 seconds — fast refresh for live election day
 export const SCRAPE_CYCLE = 120000; // 2 minutes
 
-// SSE connects directly to Flask (Next.js proxy buffers streams)
+// Server-Sent Events stream URL. DISABLED by default (empty string) because
+// the broadcaster is a Phase B TODO — the backend only emits heartbeats, so
+// there is no live data to push and data already refreshes via SWR polling
+// (REFRESH_INTERVAL). An empty URL means useSSE never opens a connection, so
+// the "RECONNECTING TO SERVER" banner never fires on a dead stream and no
+// long-lived request ties up Flask's sync gunicorn workers.
+//
+// To re-enable once the broadcaster + async (gevent) workers land, set
+// NEXT_PUBLIC_SSE_URL at build time to the same-origin path "/api/live/events"
+// (routed to Flask via DO ingress) or a dedicated streaming host.
 export const SSE_URL =
-  typeof window !== "undefined"
-    ? process.env.NEXT_PUBLIC_SSE_URL || "http://localhost:5050/api/events"
-    : "";
+  typeof window !== "undefined" ? process.env.NEXT_PUBLIC_SSE_URL || "" : "";
 
 export const NAV_ITEMS = [
   { name: "Overview", href: "/", icon: "home" },
