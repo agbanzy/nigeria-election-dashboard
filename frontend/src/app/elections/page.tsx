@@ -68,7 +68,7 @@ export default function ElectionsPage() {
                   <td className="py-2 px-3 font-semibold text-primary">{e.cycle}</td>
                   <td className="py-2 px-3">{e.election_type_label}</td>
                   <td className="py-2 px-3 text-dim">
-                    {s ? s.name : e.state_id ? `#${e.state_id}` : "national"}
+                    {s ? s.name : e.state_id ? "—" : "National"}
                   </td>
                   <td className="py-2 px-3 text-dim font-mono text-xs">{e.election_date || "—"}</td>
                   <td className="py-2 px-3 text-xs">{e.status}</td>

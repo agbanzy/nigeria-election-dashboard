@@ -162,7 +162,7 @@ export default function DashboardPage() {
                     {ELECTION_LABELS[e.type as ElectionType] || e.type} · {e.cycle}
                   </div>
                   <div className="text-[11px] text-dim">
-                    {s ? s.name : e.state_id ? `state #${e.state_id}` : "National"} ·{" "}
+                    {s ? s.name : e.state_id ? "—" : "National"} ·{" "}
                     {e.date || "date unknown"} · {e.status}
                   </div>
                 </div>

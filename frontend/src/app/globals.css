@@ -283,3 +283,24 @@ a, button, input, select, textarea {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   LEAFLET MAP — dark tooltip styling for the Nigeria choropleth
+   ═══════════════════════════════════════════════════════════════ */
+.leaflet-tooltip.ng-map-tip {
+  background: var(--tooltip-bg);
+  border: 1px solid var(--tooltip-border);
+  color: var(--text-primary, #e5e7eb);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+.leaflet-tooltip.ng-map-tip.leaflet-tooltip-top::before {
+  border-top-color: var(--tooltip-border);
+}
+.leaflet-tooltip.ng-map-tip.leaflet-tooltip-bottom::before {
+  border-bottom-color: var(--tooltip-border);
+}

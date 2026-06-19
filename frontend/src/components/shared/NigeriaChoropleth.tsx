@@ -68,6 +68,14 @@ export default function NigeriaChoropleth() {
     [winners],
   );
 
+  // code → { name, zone } so the map labels use authoritative DB names
+  // ("FCT", "Akwa Ibom") instead of the raw GADM feature names.
+  const statesByCode = useMemo(() => {
+    const map: Record<string, { name: string; zone: string }> = {};
+    for (const s of states || []) map[s.code] = { name: s.name, zone: s.zone };
+    return map;
+  }, [states]);
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -98,7 +106,8 @@ export default function NigeriaChoropleth() {
       <LeafletMap
         mode="winner"
         winnersByState={winners || {}}
-        title={`${pick.label} winners · click a state to drill`}
+        statesByCode={statesByCode}
+        title={`${pick.label} winners · click a state to expand`}
       />
 
       <div className="rounded-lg border border-dashboard-border bg-dashboard-card p-3">

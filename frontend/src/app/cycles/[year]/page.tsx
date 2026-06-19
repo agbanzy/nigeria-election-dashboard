@@ -78,7 +78,7 @@ export default function CyclePage() {
                   return (
                     <tr key={e.election_id} className="border-t border-dashboard-border/40">
                       <td className="py-2 px-3 font-semibold">
-                        {s ? s.name : e.state_id ? `#${e.state_id}` : "National"}
+                        {s ? s.name : e.state_id ? "—" : "National"}
                       </td>
                       <td className="py-2 px-3 text-dim font-mono text-xs">{e.election_date || "—"}</td>
                       <td className="py-2 px-3 text-xs">{e.status}</td>
