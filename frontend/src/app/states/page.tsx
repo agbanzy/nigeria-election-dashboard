@@ -59,7 +59,7 @@ export default function StatesIndex() {
                 className={`rounded border ${ZONE_COLORS[zone]} px-3 py-2 hover:scale-[1.02] transition-transform`}
               >
                 <div className="font-semibold text-primary">{s.name}</div>
-                <div className="text-[10px] text-dim">{s.code} · id {s.state_id}</div>
+                <div className="text-[10px] text-dim">{s.code} · {s.zone}</div>
               </Link>
             ))}
           </div>

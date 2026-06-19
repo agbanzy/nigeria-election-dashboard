@@ -13,7 +13,7 @@ import EnpBadge from "@/components/shared/EnpBadge";
 import MarginBar from "@/components/shared/MarginBar";
 import MethodologyDisclosure from "@/components/shared/MethodologyDisclosure";
 import { useApiData } from "@/hooks/useApiData";
-import type { ElectionRow } from "@/lib/api";
+import type { ElectionRow, StateRow } from "@/lib/api";
 
 interface PartyRow {
   party_id: number;
@@ -65,6 +65,11 @@ export default function ElectionDetailPage() {
     numeric ? `/api/elections/${numeric}/by-lga` : null,
     60_000,
   );
+  const { data: states } = useApiData<StateRow[]>("/api/states", 5 * 60_000);
+  const stateName = (id: number | null | undefined) =>
+    id == null
+      ? "National"
+      : states?.find((s) => s.state_id === id)?.name ?? "—";
 
   if (!numeric) {
     return (
@@ -97,7 +102,7 @@ export default function ElectionDetailPage() {
               {data.election.election_type_label} · {data.election.cycle}
             </h1>
             <p className="text-sm text-dim">
-              State ID {data.election.state_id ?? "national"} · {data.election.election_date || "date unknown"}
+              {stateName(data.election.state_id)} · {data.election.election_date || "date unknown"}
             </p>
           </header>
 

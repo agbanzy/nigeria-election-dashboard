@@ -222,6 +222,17 @@ export default function NigeriaLeafletMap({
     : null;
   const selectedZone = selectedCode ? statesByCode?.[selectedCode]?.zone : null;
 
+  // Rebuild the GeoJSON layer (re-runs onEachFeature → fresh tooltips +
+  // handlers) when the underlying data changes — the winner data usually
+  // arrives AFTER the layer first mounts, and switching the "Color by" preset
+  // swaps the whole winners set. Selection changes are NOT in this key (they're
+  // handled by the setStyle effect) so expanding a state never rebuilds.
+  const geoKey = `${title}|${mode}|${
+    winnersByState ? Object.keys(winnersByState).length : 0
+  }|${metricByState ? metricByState.size : 0}|${
+    statesByCode ? Object.keys(statesByCode).length : 0
+  }`;
+
   const legendEntries =
     mode === "winner" && winnersByState
       ? Array.from(
@@ -268,6 +279,7 @@ export default function NigeriaLeafletMap({
             url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           />
           <GeoJSON
+            key={geoKey}
             ref={geoRef}
             data={geojson}
             style={styleFn}
