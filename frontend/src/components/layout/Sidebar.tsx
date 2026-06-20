@@ -14,6 +14,7 @@ import {
   HomeIcon,
   MapIcon,
   MoonIcon,
+  ShieldCheckIcon,
   SparklesIcon,
   SunIcon,
   UsersIcon,
@@ -50,6 +51,10 @@ export default function Sidebar() {
   const { date } = useLiveClock();
   const { theme, toggleTheme } = useTheme();
   const { data: session } = useSession();
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
+  const navItems = isAdmin
+    ? [...NAV_ITEMS, { name: "Admin", href: "/admin", icon: ShieldCheckIcon }]
+    : NAV_ITEMS;
 
   return (
     <>
@@ -92,7 +97,7 @@ export default function Sidebar() {
         </div>
 
         <nav className="flex-1 p-3 space-y-1">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const active = pathname.startsWith(item.href);
             return (
               <Link
