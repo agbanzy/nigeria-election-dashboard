@@ -21,6 +21,9 @@ interface SwingResponse {
   state_code: string | null;
   swings: {
     party_id: number;
+    party_code: string | null;
+    party_name: string | null;
+    party_color: string | null;
     share_prior: number;
     share_current: number;
     delta: number;
@@ -107,7 +110,17 @@ export default function CompareCyclesPage() {
             <tbody>
               {data.swings.map((s) => (
                 <tr key={s.party_id} className="border-t border-dashboard-border/40">
-                  <td className="py-2 px-3 font-semibold">#{s.party_id}</td>
+                  <td className="py-2 px-3 font-semibold">
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="inline-block w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                        style={{ background: s.party_color || "#64748b" }}
+                      />
+                      <span title={s.party_name || undefined}>
+                        {s.party_code || s.party_name || `Party #${s.party_id}`}
+                      </span>
+                    </span>
+                  </td>
                   <td className="py-2 px-3 text-right font-mono">{(s.share_prior * 100).toFixed(2)}%</td>
                   <td className="py-2 px-3 text-right font-mono">{(s.share_current * 100).toFixed(2)}%</td>
                   <td className="py-2 px-3 text-right">

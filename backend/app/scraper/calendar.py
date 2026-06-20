@@ -57,18 +57,43 @@ def decide_mode(
     preflight_interval: int = 300,
     idle_interval: int = 86_400,
     preflight_window_hours: int = 6,
+    live_trailing_days: int = 1,
 ) -> WakeDecision:
     now = now or datetime.now(timezone.utc)
+    today = now.date()
+
+    # LIVE — an election is live for the whole of its election day (and a
+    # trailing window, since INEC keeps uploading result forms for hours/days
+    # after polls close). This also picks up rows explicitly flagged status=live.
+    #
+    # The previous logic only matched the preflight window (the 6h *before*
+    # midnight of election day) and relied on something flipping status to
+    # "live" — which nothing did. So on election day itself the delta to
+    # midnight went negative and the scraper fell through to idle (24h),
+    # never aggressively syncing the live election. That gap is the bug.
     live = live_events(session)
-    if live:
-        state_ids = frozenset(e.state_id for e in live if e.state_id is not None)
+    window_start = today - timedelta(days=max(0, live_trailing_days))
+    todays = list(
+        session.scalars(
+            select(ElectionCalendar)
+            .where(ElectionCalendar.election_date >= window_start)
+            .where(ElectionCalendar.election_date <= today)
+            .where(ElectionCalendar.status.in_(("scheduled", "live")))
+            .order_by(ElectionCalendar.election_date.desc())
+        )
+    )
+    seen = {e.calendar_id for e in live}
+    active = live + [e for e in todays if e.calendar_id not in seen]
+    if active:
+        state_ids = frozenset(e.state_id for e in active if e.state_id is not None)
         return WakeDecision(
             mode="live",
             interval_seconds=live_interval,
             state_ids=state_ids,
-            next_event=live[0],
+            next_event=active[0],
         )
 
+    # PREFLIGHT — an upcoming election within the preflight window before its date.
     upcoming = next_event(session)
     if upcoming is not None:
         delta = datetime.combine(upcoming.election_date, datetime.min.time(), tzinfo=timezone.utc) - now

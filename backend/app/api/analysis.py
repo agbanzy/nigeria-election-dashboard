@@ -131,6 +131,16 @@ def swing_between_cycles():
         a_votes = _votes_for(session, cycle=cycle_a, etype=etype, state_code=state_code)
         b_votes = _votes_for(session, cycle=cycle_b, etype=etype, state_code=state_code)
         swings = compute_swings(a_votes, b_votes)
+        # Resolve party_id → code/name/color so the UI shows "APC" not "#3".
+        party_ids = [s.party for s in swings]
+        parties = (
+            {
+                p.party_id: p
+                for p in session.scalars(select(Party).where(Party.party_id.in_(party_ids)))
+            }
+            if party_ids
+            else {}
+        )
         return jsonify(
             {
                 "cycle_a": cycle_a,
@@ -140,6 +150,9 @@ def swing_between_cycles():
                 "swings": [
                     {
                         "party_id": s.party,
+                        "party_code": parties[s.party].code if s.party in parties else None,
+                        "party_name": parties[s.party].name if s.party in parties else None,
+                        "party_color": parties[s.party].color_hex if s.party in parties else None,
                         "share_prior": s.share_prior,
                         "share_current": s.share_current,
                         "delta": s.delta,
