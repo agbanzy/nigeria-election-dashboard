@@ -133,6 +133,12 @@ def _simplify_geom(geom: dict, tol: float) -> dict:
     return geom
 
 
+def _norm(s: str) -> str:
+    import re
+
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+
 def _name(props: dict) -> str:
     for k in ("shapeName", "NAME_2", "NAME_3", "name", "ADM2_EN", "ADM3_EN"):
         if props.get(k):
@@ -162,22 +168,13 @@ def build(code: str, state_name: str, hasc: str | None) -> None:
             return None
         return (cx, cy) if _point_in_state(cx, cy, state_rings) else None
 
-    # ADM2 = LGAs. Keep both the simplified output AND the full rings (for
-    # spatially assigning wards to their parent LGA).
-    lga_polys: list[tuple[str, list]] = []
-    lga_feats = []
-    for feat in _download_geojson("ADM2")["features"]:
-        rings = _rings(feat["geometry"])
-        if not rings or _in_state(rings) is None:
-            continue
-        nm = _name(feat["properties"])
-        lga_polys.append((nm, rings))
-        feat["geometry"] = _simplify_geom(feat["geometry"], 0.002)
-        feat["properties"] = {"name": nm, "state": code}
-        lga_feats.append(feat)
-    _write(code, "lgas", lga_feats)
-
-    # Wards from GRID3 (authoritative ADM3), pre-tagged with parent LGA.
+    # Wards from GRID3 (authoritative ADM3), pre-tagged with parent LGA. Fetch
+    # first so its lganame set can authoritatively complete the LGA list — the
+    # centroid-in-state test alone drops riverine/coastal LGAs whose centroid
+    # falls in water (e.g. Rivers' Andoni/Okrika), and GRID3 is the source of
+    # truth for which LGAs the state actually has.
+    ward_feats = []
+    ward_lganames: set[str] = set()
     try:
         from urllib.parse import urlencode
 
@@ -191,22 +188,49 @@ def build(code: str, state_name: str, hasc: str | None) -> None:
             }
         )
         fc = _get_json(f"{GRID3_WARDS}?{params}")
+        for feat in fc.get("features", []):
+            if not _rings(feat.get("geometry") or {}):
+                continue
+            p = feat.get("properties", {})
+            feat["geometry"] = _simplify_geom(feat["geometry"], 0.0008)
+            feat["properties"] = {
+                "name": p.get("wardname", ""),
+                "lga": p.get("lganame", ""),
+                "state": code,
+            }
+            ward_lganames.add(_norm(p.get("lganame", "")))
+            ward_feats.append(feat)
     except Exception as exc:  # noqa: BLE001
-        print(f"  wards: GRID3 unavailable ({exc}) — skipping ward layer")
-        return
-    ward_feats = []
-    for feat in fc.get("features", []):
-        if not _rings(feat.get("geometry") or {}):
+        print(f"  wards: GRID3 unavailable ({exc}) — ward layer skipped")
+
+    # ADM2 = LGAs. Include a polygon if its centroid is in the state OR its
+    # name matches a GRID3 ward's parent LGA (catches the coastal LGAs).
+    lga_feats = []
+    seen: set[str] = set()
+    for feat in _download_geojson("ADM2")["features"]:
+        rings = _rings(feat["geometry"])
+        if not rings:
             continue
-        p = feat.get("properties", {})
-        feat["geometry"] = _simplify_geom(feat["geometry"], 0.0008)
-        feat["properties"] = {
-            "name": p.get("wardname", ""),
-            "lga": p.get("lganame", ""),
-            "state": code,
-        }
-        ward_feats.append(feat)
-    _write(code, "wards", ward_feats)
+        nm = _name(feat["properties"])
+        # Name-match adoption (for coastal LGAs the centroid test drops) must be
+        # geographically guarded — otherwise a same-named LGA in a neighbouring
+        # state (e.g. "Obi" in both Nasarawa and Benue) gets pulled in. Require
+        # the candidate's bbox to overlap the state bbox.
+        lx0, ly0, lx1, ly1 = _bbox(rings)
+        bbox_overlaps = lx0 <= sx1 and lx1 >= sx0 and ly0 <= sy1 and ly1 >= sy0
+        keep = _in_state(rings) is not None or (_norm(nm) in ward_lganames and bbox_overlaps)
+        if not keep:
+            continue
+        feat["geometry"] = _simplify_geom(feat["geometry"], 0.002)
+        feat["properties"] = {"name": nm, "state": code}
+        lga_feats.append(feat)
+        seen.add(_norm(nm))
+    missing = sorted(ward_lganames - seen - {""})
+    if missing:
+        print(f"  note: {len(missing)} ward-LGA(s) have no ADM2 polygon: {missing}")
+    _write(code, "lgas", lga_feats)
+    if ward_feats:
+        _write(code, "wards", ward_feats)
 
 
 def _write(code: str, suffix: str, feats: list) -> None:
