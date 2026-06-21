@@ -71,6 +71,13 @@ export default function StateDrillMap({ stateCode, stateName, electionId, live }
   const lgaRef = useRef<L.GeoJSON | null>(null);
   const selRef = useRef<string | null>(null);
   selRef.current = selectedLga;
+  // The Leaflet onEachFeature handlers are bound once at mount, so reads of
+  // live/byLga inside them would be stale (live starts false until the
+  // elections API resolves). Route those reads through refs kept current.
+  const liveRef = useRef(live);
+  liveRef.current = live;
+  const byLgaRef = useRef(byLga);
+  byLgaRef.current = byLga;
 
   // Geometry
   useEffect(() => {
@@ -110,14 +117,14 @@ export default function StateDrillMap({ stateCode, stateName, electionId, live }
   }, [electionId]);
 
   const lgaStyle = (name: string): L.PathOptions => {
-    const row = byLga[norm(name)];
-    const fill = row?.winner_party ? getPartyColor(row.winner_party) : live ? "#78350f" : "#1f2538";
+    const row = byLgaRef.current[norm(name)];
+    const fill = row?.winner_party ? getPartyColor(row.winner_party) : liveRef.current ? "#78350f" : "#1f2538";
     const sel = selRef.current;
     const isSel = sel === norm(name);
     const dimmed = sel !== null && !isSel;
     return {
       fillColor: fill,
-      color: isSel ? "#10b981" : live && !row ? "#f59e0b" : "#0c1226",
+      color: isSel ? "#10b981" : liveRef.current && !row ? "#f59e0b" : "#0c1226",
       weight: isSel ? 3 : 1.2,
       fillOpacity: dimmed ? 0.25 : 0.85,
     };
@@ -132,7 +139,7 @@ export default function StateDrillMap({ stateCode, stateName, electionId, live }
   const onEachLga = (feature: Feature, layer: L.Layer) => {
     const name = (feature.properties as { name: string }).name;
     const tip = () => {
-      const row = byLga[norm(name)];
+      const row = byLgaRef.current[norm(name)];
       if (row?.winner_party) {
         return (
           `<div style="font-weight:700">${name}</div>` +
@@ -140,10 +147,13 @@ export default function StateDrillMap({ stateCode, stateName, electionId, live }
           `<div style="opacity:.7;font-size:11px">${row.total_votes.toLocaleString()} votes</div>`
         );
       }
-      return `<div style="font-weight:700">${name}</div><div style="${live ? "color:#f59e0b;font-weight:600" : "opacity:.6"}">${live ? "● LIVE — counting" : "No tally yet"}</div>`;
+      const lv = liveRef.current;
+      return `<div style="font-weight:700">${name}</div><div style="${lv ? "color:#f59e0b;font-weight:600" : "opacity:.6"}">${lv ? "● LIVE — counting" : "No tally yet"}</div>`;
     };
     if ("bindTooltip" in layer) {
-      (layer as L.GeoJSON).bindTooltip(tip(), { sticky: true, className: "ng-map-tip", direction: "top" });
+      // Pass the function (not its result) so Leaflet re-evaluates it on open,
+      // picking up current live/results state instead of mount-time values.
+      (layer as L.GeoJSON).bindTooltip(() => tip(), { sticky: true, className: "ng-map-tip", direction: "top" });
     }
     if ("on" in layer) {
       layer.on({
