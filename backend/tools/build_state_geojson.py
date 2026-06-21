@@ -24,6 +24,12 @@ from pathlib import Path
 
 GEOB = "https://www.geoboundaries.org/api/current/{tier}/NGA/{adm}/"
 TIERS = ("gbOpen", "gbHumanitarian", "gbAuthoritative")
+# GRID3 authoritative Nigeria operational ward boundaries (ADM3, 9410 wards),
+# pre-tagged with wardname + lganame + statename.
+GRID3_WARDS = (
+    "https://services3.arcgis.com/BU6Aadhn6tbBEdyk/arcgis/rest/services/"
+    "NGA_Ward_Boundaries/FeatureServer/0/query"
+)
 ROOT = Path(__file__).resolve().parents[2]
 STATES_GEOJSON = ROOT / "frontend" / "public" / "ng-states.geojson"
 OUT_DIR = ROOT / "frontend" / "public" / "maps"
@@ -171,23 +177,34 @@ def build(code: str, state_name: str, hasc: str | None) -> None:
         lga_feats.append(feat)
     _write(code, "lgas", lga_feats)
 
-    # ADM3 = wards. Assign each to the LGA whose polygon contains its centroid.
-    # geoBoundaries gbOpen may not publish ADM3 for Nigeria — tolerate failure
-    # and ship the LGA map alone (the frontend degrades to "LGAs only").
+    # Wards from GRID3 (authoritative ADM3), pre-tagged with parent LGA.
     try:
-        adm3 = _download_geojson("ADM3")
+        from urllib.parse import urlencode
+
+        params = urlencode(
+            {
+                "where": f"statename='{state_name}'",
+                "outFields": "wardname,lganame,statename",
+                "outSR": "4326",
+                "f": "geojson",
+                "geometryPrecision": "5",
+            }
+        )
+        fc = _get_json(f"{GRID3_WARDS}?{params}")
     except Exception as exc:  # noqa: BLE001
-        print(f"  wards: ADM3 unavailable ({exc}) — skipping ward layer")
+        print(f"  wards: GRID3 unavailable ({exc}) — skipping ward layer")
         return
     ward_feats = []
-    for feat in adm3["features"]:
-        rings = _rings(feat["geometry"])
-        c = _in_state(rings)
-        if c is None:
+    for feat in fc.get("features", []):
+        if not _rings(feat.get("geometry") or {}):
             continue
-        parent = next((nm for nm, lr in lga_polys if _point_in_state(c[0], c[1], lr)), "")
-        feat["geometry"] = _simplify_geom(feat["geometry"], 0.0012)
-        feat["properties"] = {"name": _name(feat["properties"]), "lga": parent, "state": code}
+        p = feat.get("properties", {})
+        feat["geometry"] = _simplify_geom(feat["geometry"], 0.0008)
+        feat["properties"] = {
+            "name": p.get("wardname", ""),
+            "lga": p.get("lganame", ""),
+            "state": code,
+        }
         ward_feats.append(feat)
     _write(code, "wards", ward_feats)
 
