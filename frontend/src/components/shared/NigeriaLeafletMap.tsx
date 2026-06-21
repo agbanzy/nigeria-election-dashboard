@@ -42,6 +42,7 @@ interface Props {
   metricByState?: Map<string, number>;
   winnersByState?: WinnerByState;
   statesByCode?: Record<string, StateMeta>;
+  liveStateCodes?: string[];
   title?: string;
   metricLabel?: string;
 }
@@ -96,9 +97,11 @@ export default function NigeriaLeafletMap({
   metricByState,
   winnersByState,
   statesByCode,
+  liveStateCodes,
   title = "Nigeria · 36 states + FCT",
   metricLabel = "Elections",
 }: Props) {
+  const liveSet = useMemo(() => new Set(liveStateCodes || []), [liveStateCodes]);
   const [geojson, setGeojson] = useState<GeoJsonObject | null>(null);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const router = useRouter();
@@ -118,20 +121,28 @@ export default function NigeriaLeafletMap({
 
   const baseStyle = (code: string): L.PathOptions => {
     let fill = "#1f2538";
+    let hasData = false;
     if (mode === "winner" && winnersByState) {
       const w = winnersByState[code];
-      if (w?.winner_party_color) fill = w.winner_party_color;
+      if (w?.winner_party_color) {
+        fill = w.winner_party_color;
+        hasData = true;
+      }
     } else if (metricByState) {
       fill = metricColor(metricByState.get(code) || 0, max);
     }
+    const isLive = liveSet.has(code);
+    // A live election with no reported winner yet → amber "counting" tint so
+    // the current election stands out instead of looking like an empty state.
+    if (isLive && !hasData) fill = "#78350f";
     const sel = selectedRef.current;
     const isSelected = sel === code;
     const dimmed = sel !== null && !isSelected;
     return {
       fillColor: fill,
-      color: isSelected ? "#10b981" : "#0c1226",
-      weight: isSelected ? 3 : 1,
-      fillOpacity: dimmed ? 0.2 : 0.88,
+      color: isSelected ? "#10b981" : isLive ? "#f59e0b" : "#0c1226",
+      weight: isSelected ? 3 : isLive ? 2.5 : 1,
+      fillOpacity: dimmed ? 0.2 : isLive && !hasData ? 0.75 : 0.88,
     };
   };
 
@@ -146,7 +157,7 @@ export default function NigeriaLeafletMap({
     if (!gj) return;
     gj.setStyle((feature) => styleFn(feature as Feature));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCode, winnersByState, metricByState, mode]);
+  }, [selectedCode, winnersByState, metricByState, mode, liveStateCodes]);
 
   const tooltipHtml = (code: string, name: string): string => {
     if (mode === "winner" && winnersByState) {
@@ -159,6 +170,9 @@ export default function NigeriaLeafletMap({
           `<div style="opacity:.7;font-size:11px">${w.winner_votes.toLocaleString()} votes · ${(w.winner_share * 100).toFixed(1)}%</div>` +
           `<div style="opacity:.5;font-size:11px">Total ${w.total_votes.toLocaleString()}</div>`
         );
+      }
+      if (liveSet.has(code)) {
+        return `<div style="font-weight:700">${name} <span style="opacity:.5">${code}</span></div><div style="color:#f59e0b;font-weight:600">● LIVE — counting</div><div style="opacity:.6;font-size:11px">Results pending</div>`;
       }
       return `<div style="font-weight:700">${name} <span style="opacity:.5">${code}</span></div><div style="opacity:.6">No data</div>`;
     }

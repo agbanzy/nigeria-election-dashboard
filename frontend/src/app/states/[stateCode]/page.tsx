@@ -5,12 +5,23 @@
  * election-type tiles, full elections table, LGA grid, candidates.
  */
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useMemo } from "react";
 
 import MethodologyDisclosure from "@/components/shared/MethodologyDisclosure";
 import { useApiData } from "@/hooks/useApiData";
 import type { ElectionRow, StateRow } from "@/lib/api";
+
+const StateDrillMap = dynamic(() => import("@/components/shared/StateDrillMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="rounded-lg border border-dashboard-border bg-dashboard-card p-8 text-center text-sm text-dim">
+      Loading map…
+    </div>
+  ),
+});
 
 interface LgaRow {
   lga_id: number;
@@ -68,6 +79,23 @@ export default function StatePage() {
   }
   const sortedTypes = Object.keys(byType).sort();
 
+  // Most-recent election for the state drives the LGA/ward map colouring.
+  const recentElection = useMemo(() => {
+    const dated = (elections || [])
+      .filter((e) => e.election_date)
+      .slice()
+      .sort((a, b) => (b.election_date as string).localeCompare(a.election_date as string));
+    return dated[0] || (elections || [])[0] || null;
+  }, [elections]);
+
+  const isLive = useMemo(() => {
+    if (!recentElection?.election_date) return false;
+    const t = Date.parse(recentElection.election_date);
+    const now = Date.now();
+    // election day or the ~2 days after (results still uploading)
+    return now - t < 2.5 * 86_400_000 && t - now < 86_400_000;
+  }, [recentElection]);
+
   return (
     <div className="space-y-6">
       <header>
@@ -77,6 +105,23 @@ export default function StatePage() {
           {elections?.length ?? 0} elections · {lgas?.length ?? 0} LGAs · {candidates?.length ?? 0} candidates
         </p>
       </header>
+
+      <section>
+        <h2 className="text-sm font-bold uppercase tracking-wider text-dim mb-2">
+          {state?.name || code} map · LGAs &amp; wards
+          {recentElection && (
+            <span className="font-normal text-dim">
+              {" "}— {recentElection.election_type_label} {recentElection.cycle}
+            </span>
+          )}
+        </h2>
+        <StateDrillMap
+          stateCode={code}
+          stateName={state?.name || code}
+          electionId={recentElection?.election_id ?? null}
+          live={isLive}
+        />
+      </section>
 
       {partyTotals && partyTotals.grand_total > 0 && (
         <section>

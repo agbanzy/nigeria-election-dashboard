@@ -39,12 +39,24 @@ interface WinnersResp {
   [code: string]: Winner;
 }
 
-const COMMON_PICKS: { label: string; cycle: number; type: string }[] = [
-  { label: "2023 Presidential", cycle: 2023, type: "presidential" },
-  { label: "2023 Governorship", cycle: 2023, type: "governorship" },
-  { label: "2024 Governorship", cycle: 2024, type: "governorship" },
-  { label: "2026 LG Chairman", cycle: 2026, type: "lg_chairman" },
-];
+interface Pick {
+  label: string;
+  cycle: number;
+  type: string;
+  date: string; // ISO election date — used to sort newest-first
+}
+
+// Sorted newest-first so the landing/dashboard map opens on the CURRENT
+// election (the live Ekiti governorship) rather than an old default.
+const COMMON_PICKS: Pick[] = [
+  { label: "2026 Governorship", cycle: 2026, type: "governorship", date: "2026-06-20" },
+  { label: "2026 LG Chairman", cycle: 2026, type: "lg_chairman", date: "2026-02-21" },
+  { label: "2024 Governorship", cycle: 2024, type: "governorship", date: "2024-11-16" },
+  { label: "2023 Governorship", cycle: 2023, type: "governorship", date: "2023-03-18" },
+  { label: "2023 Presidential", cycle: 2023, type: "presidential", date: "2023-02-25" },
+]
+  .slice()
+  .sort((a, b) => b.date.localeCompare(a.date));
 
 const ZONE_COLORS: Record<string, string> = {
   NC: "bg-emerald-500/10 border-emerald-500/30",
@@ -55,17 +67,37 @@ const ZONE_COLORS: Record<string, string> = {
   SW: "bg-rose-500/10 border-rose-500/30",
 };
 
+interface ScrapeStatus {
+  mode: "live" | "preflight" | "idle";
+  active_state_ids: number[];
+  next_event: { date: string | null; type: string | null; state_id: number | null } | null;
+}
+
 export default function NigeriaChoropleth() {
   const [pick, setPick] = useState(COMMON_PICKS[0]);
   const { data: states } = useApiData<StateRow[]>("/api/states", 5 * 60_000);
   const { data: winners } = useApiData<WinnersResp>(
     `/api/analysis/winners?cycle=${pick.cycle}&type=${pick.type}`,
-    5 * 60_000,
+    pick.date >= "2026-06-01" ? 30_000 : 5 * 60_000, // poll live elections fast
   );
+  // Drives the "LIVE" treatment so the landing points at the current election.
+  const { data: scrape } = useApiData<ScrapeStatus>("/api/scrape/status", 30_000);
 
   const winnersCount = useMemo(
     () => (winners ? Object.keys(winners).length : 0),
     [winners],
+  );
+
+  // Map the daemon's active (live) numeric state_ids → state codes for the map.
+  const liveStateCodes = useMemo(() => {
+    if (!scrape || scrape.mode !== "live" || !states) return [] as string[];
+    const byId = new Map(states.map((s) => [s.state_id, s.code] as const));
+    return scrape.active_state_ids.map((id) => byId.get(id)).filter(Boolean) as string[];
+  }, [scrape, states]);
+
+  const liveStates = useMemo(
+    () => liveStateCodes.map((c) => (states || []).find((s) => s.code === c)).filter(Boolean) as StateRow[],
+    [liveStateCodes, states],
   );
 
   // code → { name, zone } so the map labels use authoritative DB names
@@ -103,11 +135,40 @@ export default function NigeriaChoropleth() {
         )}
       </div>
 
+      {liveStates.length > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-accent-red/40 bg-accent-red/10 px-4 py-2.5">
+          <span className="flex items-center gap-1.5 shrink-0">
+            <span className="w-2 h-2 rounded-full bg-accent-red animate-pulse" />
+            <span className="text-[11px] font-extrabold tracking-wider text-accent-red">LIVE</span>
+          </span>
+          <div className="text-[13px] text-primary min-w-0">
+            <span className="font-bold">
+              {liveStates.map((s) => s.name).join(", ")} · {pick.label.replace(/^\d{4}\s/, "")}
+            </span>
+            <span className="text-dim">
+              {" "}— polls counting.{" "}
+              {winnersCount === 0
+                ? "Results are being entered as forms arrive."
+                : `${winnersCount} state${winnersCount === 1 ? "" : "s"} reported.`}
+            </span>
+          </div>
+          {liveStates.length === 1 && (
+            <Link
+              href={`/states/${liveStates[0].code}`}
+              className="ml-auto shrink-0 text-xs font-bold text-accent-red underline hover:no-underline"
+            >
+              View {liveStates[0].name} results →
+            </Link>
+          )}
+        </div>
+      )}
+
       <LeafletMap
         mode="winner"
         winnersByState={winners || {}}
         statesByCode={statesByCode}
-        title={`${pick.label} winners · click a state to expand`}
+        liveStateCodes={liveStateCodes}
+        title={`${pick.label} · click a state to expand`}
       />
 
       <div className="rounded-lg border border-dashboard-border bg-dashboard-card p-3">
