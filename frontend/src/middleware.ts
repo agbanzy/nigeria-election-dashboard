@@ -6,12 +6,16 @@ const PUBLIC_PATHS = new Set(["/", "/login"]);
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Allow static assets, NextAuth routes, and public pages
+  // Allow static assets, NextAuth routes, and public pages. Map geometry
+  // (/ng-states.geojson, /maps/*.geojson) is public so the choropleth + the
+  // state drill-down maps load without an auth round-trip.
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/maps/") ||
     pathname === "/favicon.ico" ||
     pathname === "/ng-states.geojson" ||
+    pathname.endsWith(".geojson") ||
     PUBLIC_PATHS.has(pathname)
   ) {
     return NextResponse.next();

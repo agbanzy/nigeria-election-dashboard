@@ -141,11 +141,11 @@ export default function NigeriaChoropleth() {
             <span className="w-2 h-2 rounded-full bg-accent-red animate-pulse" />
             <span className="text-[11px] font-extrabold tracking-wider text-accent-red">LIVE</span>
           </span>
-          <div className="text-[13px] text-primary min-w-0">
-            <span className="font-bold">
+          <div className="text-[13px] min-w-0">
+            <span className="font-extrabold text-accent-red">
               {liveStates.map((s) => s.name).join(", ")} · {pick.label.replace(/^\d{4}\s/, "")}
             </span>
-            <span className="text-dim">
+            <span className="text-accent-red/70">
               {" "}— polls counting.{" "}
               {winnersCount === 0
                 ? "Results are being entered as forms arrive."
