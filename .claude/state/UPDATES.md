@@ -1,5 +1,10 @@
 # UPDATES — append-only changelog (newest at top)
 
+## 2026-07-18 — free API by application — DEPLOYED + live-verified (ff2ce00)
+- Live gate confirmed on prod: keyless `/api/states` → 401 with apply/docs pointer; `Sec-Fetch-Site: same-origin` → 200 list; `/api/health` exempt → 200; `/api-access` page → 200; POST /api/developer/apply → 201 ref; status → pending with NO key leak.
+- NOT verified live: the actual approve→key issuance (ADMIN_TOKEN is encrypted in spec, admin-password login is a prohibited action for the agent, and direct apcng-db access is classifier-blocked). That path IS covered by tests/test_developer_api.py against real Postgres (apply→409-dupe→approve→keyed 200→revoke 401, all green).
+- LITTER: one pending test application `verify-2026-07-18@example.com` sits in the prod api_clients table (harmless, no key). Reject it from /admin → API access applications when next logged in.
+
 ## 2026-07-18 — free API by application — apply-and-approve keys
 - Model: dashboard + data free for all, no account; programmatic API also free but gated behind issued keys.
 - Backend: `api_clients` table (migration 0007), `/api/developer` blueprint (POST /apply → application_ref, POST /status → key when approved; `flask developer list|approve|reject|revoke` CLI), admin endpoints `/api/admin/api-clients` + `/{id}/decision`, and `app/api_gate.py` before_request gate. Gate exemptions: auth/admin/developer/health/methodology, OPTIONS, and same-origin dashboard traffic (Sec-Fetch-Site or Origin/Referer host match — an attribution signal, not a security boundary). Enforcement defaults on only when ENV=production (`API_KEY_ENFORCEMENT` overrides).
