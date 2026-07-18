@@ -173,7 +173,10 @@ jobs:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
-  # Seed dashboard auth users (idempotent — skips users that already exist).
+  # Seed dashboard auth users (idempotent upsert by email).
+  # SEED_USERS is a SECRET env set via doctl/DO console — a JSON array of
+  # {email, name, role, password_hash(bcrypt)}. Never commit it. When unset
+  # the job is a no-op.
   - name: seed-users
     kind: POST_DEPLOY
     github:
