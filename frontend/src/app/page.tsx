@@ -2,7 +2,8 @@
 
 /**
  * Public landing page — shows the Nigeria election choropleth map only.
- * No sidebar, no dashboard shell. Login to access full analytics.
+ * No sidebar, no dashboard shell. The full dashboard is public; only
+ * /admin requires sign-in.
  */
 
 import dynamic from "next/dynamic";
@@ -45,10 +46,10 @@ export default function LandingPage() {
         </div>
 
         <Link
-          href="/login"
+          href="/dashboard"
           className="px-4 py-2 rounded-lg bg-[#00a651] hover:bg-[#008741] text-white text-[13px] font-bold transition-all duration-150 shadow-lg shadow-[#00a651]/20"
         >
-          Sign in
+          Open dashboard
         </Link>
       </header>
 
@@ -59,7 +60,7 @@ export default function LandingPage() {
         </h2>
         <p className="text-[13px] text-white/40 mt-2 max-w-md mx-auto">
           Pan-Nigeria, multi-cycle results, analysis and live data from INEC IReV.
-          <br className="hidden sm:block" /> Sign in to explore the full dashboard.
+          <br className="hidden sm:block" /> Free and open to everyone.
         </p>
       </div>
 
@@ -76,7 +77,10 @@ export default function LandingPage() {
         <a href={POWERED_BY_URL} className="text-white/35 hover:text-white/55 underline transition-colors">
           {POWERED_BY}
         </a>{" "}
-        · Data source: INEC IReV
+        · Data source: INEC IReV ·{" "}
+        <Link href="/login" className="text-white/25 hover:text-white/45 transition-colors">
+          Admin
+        </Link>
       </footer>
     </div>
   );

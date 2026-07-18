@@ -13,9 +13,10 @@ the hosting infrastructure).
 
 ## Design notes
 
-- The dashboard is login-gated (NextAuth credentials → Flask `/api/auth/login`
-  → bcrypt against the users table). No credentials are stored in this repo;
-  users are provisioned via the encrypted `SEED_USERS` env var or the
+- The dashboard is public (read-only election data). Only `/admin` is
+  login-gated (NextAuth credentials → Flask `/api/auth/login` → bcrypt against
+  the users table). No credentials are stored in this repo; admins are
+  provisioned via the encrypted `SEED_USERS` env var or the
   `flask auth create-user` CLI.
 - Admin write endpoints are gated by `X-Admin-Token` (`ADMIN_TOKEN` env),
   injected server-side by a Next.js proxy that first verifies the NextAuth

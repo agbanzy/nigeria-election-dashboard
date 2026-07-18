@@ -50,9 +50,10 @@ Full env-var reference: [`backend/.env.example`](backend/.env.example) and
 [`frontend/.env.example`](frontend/.env.example) — every backend var is
 declared in `app/config.py`.
 
-### Dashboard users (auth)
+### Admin users (auth)
 
-The dashboard is login-gated. Create a local user either way:
+The dashboard itself is public — only `/admin` (results ingestion) requires
+a signed-in admin. Create a local admin either way:
 
 ```bash
 # Interactive CLI

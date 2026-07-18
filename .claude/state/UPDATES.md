@@ -1,5 +1,11 @@
 # UPDATES — append-only changelog (newest at top)
 
+## 2026-07-18 — dashboard made public — login now admin-only
+- Middleware gate narrowed from everything-except-landing to `/admin/:path*` only, with a role=admin check (non-admins bounce to `/`). All viewer routes (dashboard, states, cycles, live, analytics, methodology) are public.
+- `/admin-api/*` unchanged — its route handler independently verifies an admin session before injecting `X-Admin-Token`; backend writes still require the token.
+- Landing CTA: "Sign in" → "Open dashboard" (links `/dashboard`); discreet "Admin" login link in the footer. README + SECURITY.md updated to match.
+- The `ekitigov` viewer account is now redundant (viewing needs no login).
+
 ## 2026-07-18 — open-source hardening — LICENSE, env-driven user seeding, credential rotation
 - Repo formally open-sourced (it was already public): MIT `LICENSE`, public-facing `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `backend/.env.example` + `frontend/.env.example`.
 - `seed_users.py` no longer carries bcrypt hashes — reads `SEED_USERS` env (JSON array of email/name/role/password_hash), set as an encrypted env on the `seed-users` job. Unset = no-op, so deploys never depend on it.
