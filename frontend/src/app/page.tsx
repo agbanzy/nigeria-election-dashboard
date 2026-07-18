@@ -72,15 +72,50 @@ export default function LandingPage() {
       </div>
 
       {/* Footer */}
-      <footer className="relative z-10 text-center py-4 text-[11px] text-white/20 border-t border-white/[0.05]">
-        Powered by{" "}
-        <a href={POWERED_BY_URL} className="text-white/35 hover:text-white/55 underline transition-colors">
-          {POWERED_BY}
-        </a>{" "}
-        · Data source: INEC IReV ·{" "}
-        <Link href="/login" className="text-white/25 hover:text-white/45 transition-colors">
-          Admin
-        </Link>
+      <footer className="relative z-10 text-center py-4 text-[11px] text-white/20 border-t border-white/[0.05] space-y-1">
+        <p>
+          Powered by{" "}
+          <a href={POWERED_BY_URL} className="text-white/35 hover:text-white/55 underline transition-colors">
+            {POWERED_BY}
+          </a>{" "}
+          · Data source: INEC IReV ·{" "}
+          <a
+            href="https://github.com/agbanzy/nigeria-election-dashboard"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#00a651]/70 hover:text-[#00a651] transition-colors"
+          >
+            Open source on GitHub
+          </a>{" "}
+          ·{" "}
+          <a
+            href="https://github.com/agbanzy/nigeria-election-dashboard/blob/main/docs/API.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-white/35 hover:text-white/55 transition-colors"
+          >
+            Free API
+          </a>{" "}
+          ·{" "}
+          <a
+            href="https://buymeacoffee.com/agbanzy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#ffdd00]/60 hover:text-[#ffdd00]/90 transition-colors"
+          >
+            ☕ Buy me a coffee
+          </a>{" "}
+          ·{" "}
+          <Link href="/login" className="text-white/25 hover:text-white/45 transition-colors">
+            Admin
+          </Link>
+        </p>
+        <p className="text-white/15">
+          Open to collaboration on vital open-source projects for good —{" "}
+          <a href="mailto:godwin@innoedgetech.com" className="text-white/30 hover:text-white/50 transition-colors">
+            godwin@innoedgetech.com
+          </a>
+        </p>
       </footer>
     </div>
   );

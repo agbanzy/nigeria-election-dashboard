@@ -1,5 +1,12 @@
 # UPDATES — append-only changelog (newest at top)
 
+## 2026-07-18 — OSS polish — README overhaul, API docs, OG cards, support links
+- README rebuilt as a standard OSS front page: badges (CI/MIT/live/PRs/Buy-Me-A-Coffee), features, public-API teaser, collaboration section (godwin@innoedgetech.com), Nigeria-styled.
+- `docs/API.md`: full public-API reference (all read-only endpoints + params + SSE), verified against blueprint routes and live responses.
+- Open Graph/Twitter metadata in `layout.tsx` (metadataBase, og:*, twitter card) + generated 1200×630 social card at `/opengraph-image` (next/og, navy + flag-green, statically rendered at build).
+- Landing footer: GitHub, Free API, Buy-me-a-coffee (buymeacoffee.com/agbanzy — handle exists, ownership to confirm), collaboration line, Admin link.
+- Also renamed repo earlier today: fct-election-dashboard → nigeria-election-dashboard; DO spec repointed by Godwin; this push is the deploy_on_push test.
+
 ## 2026-07-18 — dashboard made public — login now admin-only
 - Middleware gate narrowed from everything-except-landing to `/admin/:path*` only, with a role=admin check (non-admins bounce to `/`). All viewer routes (dashboard, states, cycles, live, analytics, methodology) are public.
 - `/admin-api/*` unchanged — its route handler independently verifies an admin session before injecting `X-Admin-Token`; backend writes still require the token.
