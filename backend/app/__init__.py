@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from flask import Flask
 from flask_cors import CORS
@@ -35,6 +34,7 @@ def create_app(config: Config | None = None) -> Flask:
         auth as auth_api,
         calendar as calendar_api,
         candidates,
+        developer as developer_api,
         elections,
         health,
         live,
@@ -45,7 +45,13 @@ def create_app(config: Config | None = None) -> Flask:
         states,
         sync as sync_api,
     )
+    from app.api_gate import install_api_gate
 
+    # Free-API access gate (dashboard traffic passes; programmatic access
+    # needs an approved key). Runs before every request.
+    install_api_gate(app, cfg)
+
+    app.register_blueprint(developer_api.bp)
     app.register_blueprint(admin_api.bp)
     app.register_blueprint(auth_api.bp)
     app.register_blueprint(health.bp)

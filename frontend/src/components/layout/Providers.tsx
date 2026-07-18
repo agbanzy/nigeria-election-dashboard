@@ -15,7 +15,7 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { cn } from "@/lib/utils";
 
 // Routes that render without the dashboard shell
-const PUBLIC_ROUTES = new Set(["/", "/login"]);
+const PUBLIC_ROUTES = new Set(["/", "/login", "/api-access"]);
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
   const { isFullscreen, isOnline, sseConnected } = useDashboard();

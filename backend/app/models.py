@@ -9,18 +9,16 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from sqlalchemy import (
-    JSON,
     BigInteger,
     Boolean,
     CHAR,
     Date,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
-    String,
     Text,
     UniqueConstraint,
-    Index,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -45,6 +43,30 @@ class User(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ApiClient(Base):
+    """A registered API consumer. The API is free, but access is by application:
+    apply (pending) → admin approves → a key is issued. Dashboard traffic is
+    same-origin and never needs a key."""
+
+    __tablename__ = "api_clients"
+
+    client_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    email: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    use_case: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        Text, default="pending", nullable=False
+    )  # pending|approved|rejected|revoked
+    api_key: Mapped[str | None] = mapped_column(Text, unique=True, nullable=True)
+    application_ref: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    request_count: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+
+
 class State(Base):
     __tablename__ = "states"
 
@@ -53,7 +75,7 @@ class State(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     zone: Mapped[str] = mapped_column(Text, nullable=False)  # NC|NE|NW|SE|SS|SW
 
-    lgas: Mapped[list["Lga"]] = relationship(back_populates="state", lazy="selectin")
+    lgas: Mapped[list[Lga]] = relationship(back_populates="state", lazy="selectin")
 
 
 class Lga(Base):
@@ -70,7 +92,7 @@ class Lga(Base):
     __table_args__ = (UniqueConstraint("state_id", "name", name="uq_lga_state_name"),)
 
     state: Mapped[State] = relationship(back_populates="lgas")
-    wards: Mapped[list["Ward"]] = relationship(back_populates="lga", lazy="selectin")
+    wards: Mapped[list[Ward]] = relationship(back_populates="lga", lazy="selectin")
 
 
 class Ward(Base):
@@ -82,7 +104,7 @@ class Ward(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
 
     lga: Mapped[Lga] = relationship(back_populates="wards")
-    polling_units: Mapped[list["PollingUnit"]] = relationship(back_populates="ward", lazy="selectin")
+    polling_units: Mapped[list[PollingUnit]] = relationship(back_populates="ward", lazy="selectin")
 
 
 class PollingUnit(Base):

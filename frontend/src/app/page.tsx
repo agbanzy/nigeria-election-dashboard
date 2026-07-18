@@ -88,14 +88,9 @@ export default function LandingPage() {
             Open source on GitHub
           </a>{" "}
           ·{" "}
-          <a
-            href="https://github.com/agbanzy/nigeria-election-dashboard/blob/main/docs/API.md"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-white/35 hover:text-white/55 transition-colors"
-          >
+          <Link href="/api-access" className="text-white/35 hover:text-white/55 transition-colors">
             Free API
-          </a>{" "}
+          </Link>{" "}
           ·{" "}
           <a
             href="https://buymeacoffee.com/agbanzy"

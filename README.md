@@ -32,16 +32,21 @@ mean something — Presidential down to Area Council, national down to ward.
   competitiveness index, not just bar charts
 - **Maps all the way down** — interactive choropleths from national → state →
   LGA → ward
-- **Free public API** — every number on the dashboard is one `curl` away, no
-  key required → [docs/API.md](docs/API.md)
+- **Free public API** — every number on the dashboard is one `curl` away.
+  Free keys, by application → [apply here](https://elections.innoedgetech.com/api-access) ·
+  [docs/API.md](docs/API.md)
 - **Open methodology** — sources, formulas, and known gaps documented
   [on-site](https://elections.innoedgetech.com/methodology)
 
 ## Public API
 
+The dashboard is free for everyone with no account. The API is free too —
+[apply for a key](https://elections.innoedgetech.com/api-access) (name, email,
+what you're building), get approved, and go:
+
 ```bash
-curl "https://elections.innoedgetech.com/api/analysis/winners?cycle=2023&type=presidential"
-curl -N https://elections.innoedgetech.com/api/live/events   # SSE during live elections
+curl -H "X-API-Key: ned_..." "https://elections.innoedgetech.com/api/analysis/winners?cycle=2023&type=presidential"
+curl -N -H "X-API-Key: ned_..." https://elections.innoedgetech.com/api/live/events   # SSE during live elections
 ```
 
 Full endpoint reference: **[docs/API.md](docs/API.md)**.

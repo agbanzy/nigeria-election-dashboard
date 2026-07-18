@@ -24,11 +24,17 @@ class Config:
     # idle sleep cycle. Defaults to 1.0 (polite). Set to 4-5 for full sync.
     scraper_burst_factor: float
     cors_origins: str
+    # Free API, but by application: gate /api/* reads behind issued keys
+    # (dashboard same-origin traffic always passes). Defaults on in
+    # production, off elsewhere; override with API_KEY_ENFORCEMENT.
+    api_key_enforcement: bool
 
     @classmethod
-    def from_env(cls) -> "Config":
+    def from_env(cls) -> Config:
+        env = os.environ.get("ENV", "development")
+        enforcement_raw = os.environ.get("API_KEY_ENFORCEMENT", "")
         return cls(
-            env=os.environ.get("ENV", "development"),  # type: ignore[arg-type]
+            env=env,  # type: ignore[arg-type]
             log_level=os.environ.get("LOG_LEVEL", "INFO"),
             database_url=os.environ.get(
                 "DATABASE_URL",
@@ -52,6 +58,9 @@ class Config:
             ),
             scraper_burst_factor=float(os.environ.get("SCRAPER_BURST_FACTOR", "1.0")),
             cors_origins=os.environ.get("CORS_ORIGINS", "*"),
+            api_key_enforcement=(
+                enforcement_raw.lower() == "true" if enforcement_raw else env == "production"
+            ),
         )
 
 

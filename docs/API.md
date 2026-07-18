@@ -1,8 +1,9 @@
 # Public API
 
-The dashboard's backing API is **open and free** — the same JSON endpoints the
-UI consumes. No API key, no login, no rate cards. Please be polite (cache on
-your side, no hammering) so it stays that way.
+The dashboard's backing API is **free** — the same JSON endpoints the UI
+consumes, no rate cards, no billing. Programmatic access is by application:
+you apply (free), we approve, you get a key. That keeps usage attributable
+and lets us reach you if the data or the API changes.
 
 ```
 Base URL (production):  https://elections.innoedgetech.com/api
@@ -12,10 +13,26 @@ Base URL (local dev):   http://localhost:8080/api
 All endpoints are `GET` and return JSON unless noted. Write/admin endpoints
 are token-gated and not part of the public surface.
 
+## Getting a key
+
+1. Apply at **[elections.innoedgetech.com/api-access](https://elections.innoedgetech.com/api-access)**
+   — name, email, and a line on what you're building.
+2. Save the `application_ref` shown after applying — it is the only way to
+   retrieve your key.
+3. Once approved, retrieve your key on the same page and send it as a header:
+
+```bash
+curl -H "X-API-Key: ned_..." https://elections.innoedgetech.com/api/states
+```
+
+Keyless requests get a `401` with a pointer back to the application page.
+`/api/health` and `/api/methodology` are open to everyone, and the dashboard
+itself never needs a key. Please still be polite — cache on your side.
+
 ## Quick taste
 
 ```bash
-curl https://elections.innoedgetech.com/api/states
+curl -H "X-API-Key: ned_..." https://elections.innoedgetech.com/api/states
 ```
 
 ```json
@@ -26,7 +43,8 @@ curl https://elections.innoedgetech.com/api/states
 ```
 
 ```bash
-curl "https://elections.innoedgetech.com/api/elections?cycle=2023&type=presidential"
+curl -H "X-API-Key: ned_..." \
+  "https://elections.innoedgetech.com/api/elections?cycle=2023&type=presidential"
 ```
 
 ```json
@@ -121,7 +139,7 @@ Metric definitions and formulas: see `/api/methodology` or the
 
 ```bash
 # Watch a live election from your terminal
-curl -N https://elections.innoedgetech.com/api/live/events
+curl -N -H "X-API-Key: ned_..." https://elections.innoedgetech.com/api/live/events
 ```
 
 ## Data licensing

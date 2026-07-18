@@ -28,7 +28,11 @@ results: list[tuple[str, str, str]] = []  # (status, name, detail)
 
 
 def fetch(path: str, *, accept: str = "application/json", timeout: int = 30) -> tuple[int, bytes]:
-    req = urllib.request.Request(URL + path, headers={"Accept": accept})
+    # Present as dashboard-equivalent traffic: the free-API gate (app/api_gate.py)
+    # passes same-origin fetch metadata, and this probe is our own smoke test.
+    req = urllib.request.Request(
+        URL + path, headers={"Accept": accept, "Sec-Fetch-Site": "same-origin"}
+    )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, r.read()

@@ -25,7 +25,10 @@ def pg_url() -> Iterator[str]:
         pytest.skip("testcontainers not installed")
 
     with PostgresContainer("postgres:15-alpine") as pg:
-        url = pg.get_connection_url().replace("postgresql://", "postgresql+psycopg://")
+        # testcontainers hands back a psycopg2 URL; this app uses psycopg 3.
+        url = pg.get_connection_url().replace(
+            "postgresql+psycopg2://", "postgresql://"
+        ).replace("postgresql://", "postgresql+psycopg://")
         os.environ["DATABASE_URL"] = url
         yield url
 

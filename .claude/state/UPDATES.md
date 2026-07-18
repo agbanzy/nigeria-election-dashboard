@@ -1,5 +1,12 @@
 # UPDATES — append-only changelog (newest at top)
 
+## 2026-07-18 — free API by application — apply-and-approve keys
+- Model: dashboard + data free for all, no account; programmatic API also free but gated behind issued keys.
+- Backend: `api_clients` table (migration 0007), `/api/developer` blueprint (POST /apply → application_ref, POST /status → key when approved; `flask developer list|approve|reject|revoke` CLI), admin endpoints `/api/admin/api-clients` + `/{id}/decision`, and `app/api_gate.py` before_request gate. Gate exemptions: auth/admin/developer/health/methodology, OPTIONS, and same-origin dashboard traffic (Sec-Fetch-Site or Origin/Referer host match — an attribution signal, not a security boundary). Enforcement defaults on only when ENV=production (`API_KEY_ENFORCEMENT` overrides).
+- Duplicate-apply returns 409 WITHOUT the original application_ref (the ref is the retrieval secret).
+- Frontend: public `/api-access` page (apply form + status/key checker, added to PUBLIC_ROUTES), `ApiClientsPanel` in /admin (approve/reject/revoke), landing footer Free API → /api-access.
+- Docs: API.md "Getting a key" section; README API section updated. Integration tests in `tests/test_developer_api.py`. CI e2e probe now sends Sec-Fetch-Site: same-origin.
+
 ## 2026-07-18 — OSS polish — README overhaul, API docs, OG cards, support links
 - README rebuilt as a standard OSS front page: badges (CI/MIT/live/PRs/Buy-Me-A-Coffee), features, public-API teaser, collaboration section (godwin@innoedgetech.com), Nigeria-styled.
 - `docs/API.md`: full public-API reference (all read-only endpoints + params + SSE), verified against blueprint routes and live responses.

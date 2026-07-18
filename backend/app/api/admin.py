@@ -21,7 +21,6 @@ choropleth + comparison populate automatically.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
 
 import requests
 from flask import Blueprint, jsonify, request
@@ -322,3 +321,61 @@ def _as_int(v):
         return int(v)
     except (TypeError, ValueError):
         return None
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# 5. API-access applications (apply-and-approve free API keys)
+# ────────────────────────────────────────────────────────────────────────────
+
+@bp.get("/api-clients")
+def api_clients():
+    """All API access applications, newest first."""
+    if not _require_admin():
+        return _unauthorized()
+    from app.models import ApiClient
+
+    with session_scope() as session:
+        rows = session.scalars(
+            select(ApiClient).order_by(ApiClient.created_at.desc())
+        ).all()
+        return jsonify(
+            {
+                "clients": [
+                    {
+                        "client_id": c.client_id,
+                        "name": c.name,
+                        "email": c.email,
+                        "use_case": c.use_case,
+                        "status": c.status,
+                        "api_key": c.api_key if c.status == "approved" else None,
+                        "created_at": c.created_at.isoformat() if c.created_at else None,
+                        "decided_at": c.decided_at.isoformat() if c.decided_at else None,
+                        "last_used_at": c.last_used_at.isoformat() if c.last_used_at else None,
+                        "request_count": c.request_count,
+                    }
+                    for c in rows
+                ]
+            }
+        )
+
+
+@bp.post("/api-clients/<int:client_id>/decision")
+def api_client_decision(client_id: int):
+    """Approve / reject / revoke an API access application."""
+    if not _require_admin():
+        return _unauthorized()
+    from app.api.developer import _decide
+    from app.models import ApiClient
+
+    body = request.get_json(silent=True) or {}
+    action = (body.get("action") or "").strip()
+    status_map = {"approve": "approved", "reject": "rejected", "revoke": "revoked"}
+    if action not in status_map:
+        return jsonify({"error": "action must be approve, reject or revoke"}), 400
+
+    with session_scope() as session:
+        client = session.get(ApiClient, client_id)
+        if not client:
+            return jsonify({"error": "unknown client"}), 404
+        _decide(session, client.email, status_map[action])
+        return jsonify({"ok": True, "status": status_map[action]})

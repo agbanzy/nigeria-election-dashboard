@@ -15,6 +15,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 
+import ApiClientsPanel from "@/components/admin/ApiClientsPanel";
 import { useApiData } from "@/hooks/useApiData";
 
 interface LiveElection {
@@ -395,6 +396,8 @@ export default function AdminPage() {
           </details>
         </section>
       )}
+
+      <ApiClientsPanel />
     </div>
   );
 }
