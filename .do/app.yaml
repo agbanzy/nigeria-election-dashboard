@@ -4,7 +4,7 @@ region: fra
 services:
   - name: web
     github:
-      repo: agbanzy/fct-election-dashboard
+      repo: agbanzy/nigeria-election-dashboard
       branch: main
       deploy_on_push: true
     source_dir: backend
@@ -40,7 +40,7 @@ services:
 
   - name: frontend
     github:
-      repo: agbanzy/fct-election-dashboard
+      repo: agbanzy/nigeria-election-dashboard
       branch: main
       deploy_on_push: true
     source_dir: frontend
@@ -76,7 +76,7 @@ services:
 workers:
   - name: scraper
     github:
-      repo: agbanzy/fct-election-dashboard
+      repo: agbanzy/nigeria-election-dashboard
       branch: main
       deploy_on_push: true
     source_dir: backend
@@ -122,7 +122,7 @@ jobs:
   - name: migrate
     kind: PRE_DEPLOY
     github:
-      repo: agbanzy/fct-election-dashboard
+      repo: agbanzy/nigeria-election-dashboard
       branch: main
     source_dir: backend
     build_command: pip install -r requirements.txt
@@ -134,7 +134,7 @@ jobs:
   - name: seed
     kind: POST_DEPLOY
     github:
-      repo: agbanzy/fct-election-dashboard
+      repo: agbanzy/nigeria-election-dashboard
       branch: main
     source_dir: backend
     build_command: pip install -r requirements.txt
@@ -147,7 +147,7 @@ jobs:
   - name: discover-headers
     kind: POST_DEPLOY
     github:
-      repo: agbanzy/fct-election-dashboard
+      repo: agbanzy/nigeria-election-dashboard
       branch: main
     source_dir: backend
     build_command: pip install -r requirements.txt
@@ -164,7 +164,7 @@ jobs:
   - name: seed-historical
     kind: POST_DEPLOY
     github:
-      repo: agbanzy/fct-election-dashboard
+      repo: agbanzy/nigeria-election-dashboard
       branch: main
     source_dir: backend
     build_command: pip install -r requirements.txt
@@ -180,7 +180,7 @@ jobs:
   - name: seed-users
     kind: POST_DEPLOY
     github:
-      repo: agbanzy/fct-election-dashboard
+      repo: agbanzy/nigeria-election-dashboard
       branch: main
     source_dir: backend
     build_command: pip install -r requirements.txt
