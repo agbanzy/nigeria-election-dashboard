@@ -48,7 +48,6 @@ export const NAV_ITEMS = [
   { name: "Overview", href: "/", icon: "home" },
   { name: "Elections", href: "/elections", icon: "chart-bar" },
   { name: "Analytics", href: "/analytics", icon: "chart-pie" },
-  { name: "Messaging", href: "/messaging", icon: "chat-bubble" },
 ] as const;
 
 export function getPartyColor(party: string): string {

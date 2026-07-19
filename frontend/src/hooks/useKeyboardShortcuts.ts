@@ -40,9 +40,6 @@ export function useKeyboardShortcuts() {
         case "3":
           router.push("/analytics");
           break;
-        case "4":
-          router.push("/messaging");
-          break;
       }
     };
     window.addEventListener("keydown", handler);
