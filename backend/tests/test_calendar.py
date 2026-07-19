@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -32,7 +32,7 @@ def test_decide_mode_preflight_within_window(db_engine):
             )
         )
 
-    fixed_now = datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc) - timedelta(hours=2)
+    fixed_now = datetime.combine(today, datetime.min.time(), tzinfo=UTC) - timedelta(hours=2)
     with session_scope() as session:
         decision = decide_mode(session, now=fixed_now)
     assert decision.mode == "preflight"
@@ -40,10 +40,13 @@ def test_decide_mode_preflight_within_window(db_engine):
 
 def test_decide_mode_live_overrides_calendar(db_engine):
     from app.db import session_scope
-    from app.models import ElectionCalendar
+    from app.models import ElectionCalendar, State
     from app.scraper.calendar import decide_mode
 
     with session_scope() as session:
+        # Seed the referenced state — election_calendar.state_id is a FK.
+        session.add(State(state_id=15, code="FC", name="FCT", zone="NC"))
+        session.flush()
         session.add(
             ElectionCalendar(
                 election_date=date.today(), election_type="presidential", status="live", state_id=15

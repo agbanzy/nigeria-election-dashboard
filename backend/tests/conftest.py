@@ -35,9 +35,10 @@ def pg_url() -> Iterator[str]:
 
 @pytest.fixture
 def db_engine(pg_url: str):
-    from app.db import init_engine
-    from alembic.config import Config as AlembicConfig
     from alembic import command
+    from alembic.config import Config as AlembicConfig
+
+    from app.db import init_engine
 
     engine = init_engine(pg_url)
 
