@@ -21,7 +21,6 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import normalize_database_url
 
-
 SCHEMA_NAME = os.environ.get("DB_SCHEMA", "")  # empty = use the user's default search_path (set by migration)
 
 
@@ -33,10 +32,41 @@ _engine: Engine | None = None
 _SessionLocal: sessionmaker[Session] | None = None
 
 
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, "") or default)
+    except ValueError:
+        return default
+
+
 def init_engine(database_url: str, *, echo: bool = False) -> Engine:
     global _engine, _SessionLocal
     url = normalize_database_url(database_url)
-    _engine = create_engine(url, echo=echo, pool_pre_ping=True, future=True)
+
+    engine_kwargs: dict[str, Any] = {
+        "echo": echo,
+        "pool_pre_ping": True,
+        "future": True,
+    }
+    # Bound the connection pool + recycle idle connections. The app shares the
+    # apcng-db managed cluster with a sibling project, so an unbounded pool here
+    # could exhaust the cluster's connection budget and take out both apps.
+    if url.startswith("postgresql"):
+        engine_kwargs.update(
+            pool_size=_int_env("DB_POOL_SIZE", 5),
+            max_overflow=_int_env("DB_MAX_OVERFLOW", 5),
+            pool_timeout=_int_env("DB_POOL_TIMEOUT", 30),
+            pool_recycle=_int_env("DB_POOL_RECYCLE", 1800),
+        )
+        # Per-statement server-side timeout so a runaway election-day query is
+        # killed by Postgres instead of pinning a worker + a shared connection.
+        stmt_timeout_ms = _int_env("DB_STATEMENT_TIMEOUT_MS", 30_000)
+        if stmt_timeout_ms > 0:
+            engine_kwargs["connect_args"] = {
+                "options": f"-c statement_timeout={stmt_timeout_ms}"
+            }
+
+    _engine = create_engine(url, **engine_kwargs)
 
     # Every new connection pins search_path so unqualified table references
     # resolve to the same schema the migration created tables in. If DB_SCHEMA
