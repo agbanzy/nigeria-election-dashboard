@@ -1,5 +1,11 @@
 # UPDATES — append-only changelog (newest at top)
 
+## 2026-07-19 — Sprint 1 MERGED + DEPLOYED + live-verified
+- PR #37 rebase-merged to main (334d758…); deploy `e6dfc67a` ACTIVE. Applied the merged spec via `doctl apps update` (gthread + CORS pin + burst 1.0), all 3 encrypted secrets preserved (ADMIN_TOKEN present → boot-guard safe). Merged spec archived at `~/.credentials/elections-spec-sprint1-2026-07-19.yaml`.
+- Live-verified: /api/health 200 + scraper block; /api/health/scraper 200; gate keyless 401 / same-origin 200; admin keyless 401 (fail-closed); dashboard 200; CORS echoes dashboard origin + denies evil origin; developer-apply rate limit 429 after 5 (flask-limiter active).
+- NUANCE found: public /api/auth/login routes to the FRONTEND (NextAuth), not Flask — so the Flask login limiter is internal-only defense-in-depth; the real login brute-force defense (F-203) belongs at NextAuth/edge. Follow-up.
+- LITTER: pending test applications `verify-2026-07-18@example.com` and `ratelimit-probe@example.com` in api_clients (harmless, no keys) — reject in /admin when convenient.
+
 ## 2026-07-19 — audit remediation Sprint 1 shipped to PR #37 (fix/audit-2026-07-19-sprint1)
 - One PR remediating the safe majority of the 108-finding audit. 8 commits. Local gate GREEN: ruff clean tree-wide, 41 pytest (was 29; +12 new hardening tests) on real Postgres, frontend lint + prod build.
 - Security: fail-closed admin gate + hmac + **prod won't boot without ADMIN_TOKEN** (F-201/706); SSRF+bomb guard on /api/admin/ocr (F-202); flask-limiter on login+apply (F-203/703); CORS pin (F-204).
