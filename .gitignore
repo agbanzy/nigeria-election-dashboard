@@ -10,6 +10,7 @@ frontend/node_modules/
 frontend/.next/
 
 # SQLite (will be recreated by scraper)
+election_data.db
 *.db-shm
 *.db-wal
 
