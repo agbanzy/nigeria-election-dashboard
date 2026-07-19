@@ -16,6 +16,7 @@ Retries on 429/5xx with backoff. Token bucket caps to 30 req/min.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 import time
@@ -112,10 +113,8 @@ class IrevClient:
         body = resp.json()
         # Best-effort: write to local cache table. Failure here is non-fatal
         # — caching is an optimization, not a correctness requirement.
-        try:
+        with contextlib.suppress(Exception):
             self._maybe_cache(url, params, resp.status_code, body)
-        except Exception:  # noqa: BLE001
-            pass
         return body
 
     def _maybe_cache(
@@ -126,14 +125,13 @@ class IrevClient:
         body: Any,
     ) -> None:
         # Lazy import to avoid pulling DB into pure HTTP test paths.
-        from sqlalchemy import select
+        import hashlib
+        import json as _json
+
         from sqlalchemy.dialects.postgresql import insert
 
         from app.db import session_scope
         from app.models import IrevRawCache
-
-        import hashlib
-        import json as _json
 
         canonical = url + ("?" + _json.dumps(params, sort_keys=True) if params else "")
         url_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -143,7 +141,7 @@ class IrevClient:
                 url_hash=url_hash,
                 url=canonical[:1000],
                 status_code=status,
-                body=body if isinstance(body, (dict, list)) else None,
+                body=body if isinstance(body, dict | list) else None,
             )
             # Upsert on conflict (url_hash unique).
             stmt = stmt.on_conflict_do_update(

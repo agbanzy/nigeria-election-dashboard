@@ -10,7 +10,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-
 Aggregation = Literal["pu", "ward", "lga", "state", "national"]
 
 
@@ -36,7 +35,7 @@ class ResultRow(BaseModel):
     aggregation: Aggregation
 
     @model_validator(mode="after")
-    def check_aggregation_consistency(self) -> "ResultRow":
+    def check_aggregation_consistency(self) -> ResultRow:
         # Tighter rules: aggregations require lower-level fields to be present.
         if self.aggregation == "pu" and not self.pu_code:
             raise ValueError("aggregation='pu' requires pu_code")

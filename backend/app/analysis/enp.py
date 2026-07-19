@@ -8,8 +8,7 @@ A Measure with Application to West Europe. Comparative Political Studies, 12(1).
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from typing import Mapping
+from collections.abc import Iterable, Mapping
 
 
 def effective_number_of_parties(votes_by_party: Mapping[str | int, int | float]) -> float:

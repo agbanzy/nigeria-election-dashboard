@@ -12,14 +12,14 @@ Create Date: 2026-05-15
 
 from __future__ import annotations
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 
 revision: str = "0005_fix_municipal_to_amac"
-down_revision: Union[str, None] = "0004_candidates_lga_ward"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "0004_candidates_lga_ward"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

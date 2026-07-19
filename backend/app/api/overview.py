@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
-
 from flask import Blueprint, jsonify, request
 from sqlalchemy import func, select
 
 from app.db import session_scope
-from app.models import Election, ElectionResult, Lga, State
+from app.models import Election, Lga, State
 
 bp = Blueprint("overview", __name__, url_prefix="/api/overview")
 

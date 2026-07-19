@@ -56,12 +56,12 @@ def list_lgas(code: str):
         return jsonify(
             [
                 {
-                    "lga_id": l.lga_id,
-                    "name": l.name,
-                    "kind": l.lga_kind,
-                    "irev_lga_id": l.irev_lga_id,
+                    "lga_id": lga.lga_id,
+                    "name": lga.name,
+                    "kind": lga.lga_kind,
+                    "irev_lga_id": lga.irev_lga_id,
                 }
-                for l in rows
+                for lga in rows
             ]
         )
 

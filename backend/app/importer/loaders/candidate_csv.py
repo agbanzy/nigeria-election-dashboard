@@ -49,7 +49,7 @@ def load_candidates_csv(
     elections_touched: set[int] = set()
 
     with session_scope() as session:
-        source = _ensure_source(session, source_name, source_license, source_url)
+        _ensure_source(session, source_name, source_license, source_url)
 
         for i, raw in enumerate(rows, start=2):
             try:

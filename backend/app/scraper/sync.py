@@ -22,18 +22,16 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.importer.normalizers import resolve_party
 from app.models import (
     Election,
     ElectionResult,
-    IngestionSource,
-    IrevRawCache,
     Lga,
     PollingUnit,
     State,
@@ -41,8 +39,6 @@ from app.models import (
 )
 from app.scraper.election_types import (
     ELECTION_TYPE_IDS,
-    LABELS,
-    irev_id_to_type,
 )
 from app.scraper.irev_client import IrevClient
 from app.scraper.phases import (
@@ -129,7 +125,7 @@ def discover_election_headers(session: Session, client: IrevClient) -> dict[str,
                 election_date=edate,
                 status="historical",
             )
-            elec.headers_synced_at = datetime.now(timezone.utc)
+            elec.headers_synced_at = datetime.now(UTC)
             elec.sync_priority = _compute_priority(edate, today)
             n += 1
         touched[etype] = n
@@ -180,12 +176,15 @@ def sync_election_structure(
     """Walk LGAs + wards for one election. Idempotent. Returns True if work done."""
     if election.state_id is None:
         # Presidential national row — no per-state structure to walk.
-        election.structure_synced_at = datetime.now(timezone.utc)
+        election.structure_synced_at = datetime.now(UTC)
         return False
-    now = datetime.now(timezone.utc)
-    if not force and election.structure_synced_at:
-        if now - election.structure_synced_at < STRUCTURE_FRESHNESS:
-            return False
+    now = datetime.now(UTC)
+    if (
+        not force
+        and election.structure_synced_at
+        and now - election.structure_synced_at < STRUCTURE_FRESHNESS
+    ):
+        return False
     try:
         count = scrape_lga_structure(
             client, session, election=election, state_id=election.state_id
@@ -244,7 +243,7 @@ def sync_election_stats(
     uploaded = _coerce_int(data.get("documents") or data.get("uploaded"))
     election.expected_pus = expected
     election.uploaded_pus = uploaded
-    election.results_synced_at = datetime.now(timezone.utc)
+    election.results_synced_at = datetime.now(UTC)
     if expected is not None and uploaded is not None and expected > 0 and uploaded >= expected:
         election.sync_complete = True
     log_phase(
@@ -306,18 +305,24 @@ def tick(session: Session, client: IrevClient, *, max_api_calls: int) -> dict[st
         if calls >= max_api_calls:
             break
 
-        if elec.structure_synced_at is None and elec.state_id is not None:
-            if sync_election_structure(session, client, elec):
-                counters["structure"] += 1
-                calls += 1
+        if (
+            elec.structure_synced_at is None
+            and elec.state_id is not None
+            and sync_election_structure(session, client, elec)
+        ):
+            counters["structure"] += 1
+            calls += 1
 
         if calls >= max_api_calls:
             break
 
-        if elec.irev_election_id and not elec.sync_complete:
-            if sync_election_stats(session, client, elec):
-                counters["stats"] += 1
-                calls += 1
+        if (
+            elec.irev_election_id
+            and not elec.sync_complete
+            and sync_election_stats(session, client, elec)
+        ):
+            counters["stats"] += 1
+            calls += 1
 
         # PU walk — only after structure exists, and only when budget remains.
         if (
