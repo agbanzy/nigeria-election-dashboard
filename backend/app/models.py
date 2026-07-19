@@ -9,9 +9,9 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from sqlalchemy import (
+    CHAR,
     BigInteger,
     Boolean,
-    CHAR,
     Date,
     ForeignKey,
     Index,
@@ -256,6 +256,8 @@ class ElectionResult(Base):
         Index("ix_results_election_party", "election_id", "party_id"),
         Index("ix_results_state", "state_id"),
         Index("ix_results_aggregation", "aggregation"),
+        Index("ix_results_lga", "lga_id"),
+        Index("ix_results_party", "party_id"),
     )
 
 
