@@ -9,7 +9,11 @@ services:
       deploy_on_push: true
     source_dir: backend
     build_command: pip install -r requirements.txt
-    run_command: gunicorn -w 2 -b 0.0.0.0:8080 app.wsgi:app --timeout 120
+    # Threaded workers: 2 procs × 4 threads = 8 concurrent requests (was 2 sync
+    # workers = 2). Threads also stop a single slow request / SSE stream from
+    # wedging the whole API. Cheaper than a 2nd instance and avoids doubling the
+    # connection load on the shared apcng-db cluster.
+    run_command: gunicorn -w 2 --threads 4 -k gthread -b 0.0.0.0:8080 app.wsgi:app --timeout 120
     instance_size_slug: basic-xxs
     instance_count: 1
     http_port: 8080
@@ -22,6 +26,17 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${db.DATABASE_URL}
+      # ADMIN_TOKEN gates all admin write endpoints and is REQUIRED: the app
+      # fails closed and refuses to boot in production without it. Set it as an
+      # encrypted secret via the DO console / doctl — never commit the value.
+      # - key: ADMIN_TOKEN
+      #   scope: RUN_TIME
+      #   type: SECRET
+      # Pin CORS to the dashboard origin (was defaulting to "*"). Programmatic
+      # API consumers use server-side keys, not browser CORS.
+      - key: CORS_ORIGINS
+        scope: RUN_TIME
+        value: https://elections.innoedgetech.com
       # IREV_API_KEY intentionally unset — IrevClient uses INEC's public
       # Angular client key by default. Override via the DO console only if
       # INEC rotates the SPA key.
@@ -97,12 +112,13 @@ workers:
       - key: SCRAPER_ENABLED
         scope: RUN_TIME
         value: "true"
-      # Multiplier on per-tick API budgets + shorter idle sleep. Defaults to
-      # 1.0 (polite, ~960 calls/day). Bump to 5.0 to drain ~400 elections in
-      # <1 day. 8.0+ may trip INEC rate limits.
+      # Multiplier on per-tick API budgets + shorter idle sleep. 1.0 = polite
+      # (~960 calls/day). Kept at 1.0 permanently — a committed 5.0 drives
+      # ~24k IReV calls/day on any backlog and risks an INEC IP ban on election
+      # day. Bump temporarily via the DO console only for a one-off backfill.
       - key: SCRAPER_BURST_FACTOR
         scope: RUN_TIME
-        value: "5.0"
+        value: "1.0"
       - key: LOG_LEVEL
         scope: RUN_TIME
         value: INFO
