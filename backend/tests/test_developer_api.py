@@ -11,9 +11,14 @@ pytestmark = pytest.mark.integration
 
 def _prod_app():
     """App with production-style key enforcement on."""
+    import os
+
     from app import create_app
     from app.config import Config
 
+    # A production app now requires ADMIN_TOKEN (fail-closed admin gate); set a
+    # dummy so create_app's startup guard is satisfied.
+    os.environ.setdefault("ADMIN_TOKEN", "test-admin-token")
     cfg = dataclasses.replace(Config.from_env(), env="production", api_key_enforcement=True)
     return create_app(cfg)
 
@@ -60,10 +65,15 @@ def test_apply_approve_key_lifecycle(db_engine):
     assert r.get_json()["status"] == "pending"
     assert "api_key" not in r.get_json()
 
-    # Admin approves (ADMIN_TOKEN unset in tests → admin endpoints open).
-    clients = client.get("/api/admin/api-clients").get_json()["clients"]
+    # Admin approves. The admin gate is fail-closed, so these calls must carry
+    # the X-Admin-Token (a keyless admin call is now rejected).
+    admin_hdr = {"X-Admin-Token": "test-admin-token"}
+    assert client.get("/api/admin/api-clients").status_code == 401  # no token → denied
+    clients = client.get("/api/admin/api-clients", headers=admin_hdr).get_json()["clients"]
     cid = clients[0]["client_id"]
-    r = client.post(f"/api/admin/api-clients/{cid}/decision", json={"action": "approve"})
+    r = client.post(
+        f"/api/admin/api-clients/{cid}/decision", json={"action": "approve"}, headers=admin_hdr
+    )
     assert r.status_code == 200
 
     # Applicant retrieves the key with their ref.
@@ -76,7 +86,9 @@ def test_apply_approve_key_lifecycle(db_engine):
     assert client.get("/api/states", headers={"X-API-Key": "ned_bogus"}).status_code == 401
 
     # Revocation kills the key immediately.
-    client.post(f"/api/admin/api-clients/{cid}/decision", json={"action": "revoke"})
+    client.post(
+        f"/api/admin/api-clients/{cid}/decision", json={"action": "revoke"}, headers=admin_hdr
+    )
     assert client.get("/api/states", headers={"X-API-Key": key}).status_code == 401
 
 
