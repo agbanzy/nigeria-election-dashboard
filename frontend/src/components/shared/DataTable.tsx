@@ -4,7 +4,6 @@ import { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { ChevronUpIcon, ChevronDownIcon } from "@heroicons/react/24/solid";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface Column<T = any> {
   key: string;
   label: string;

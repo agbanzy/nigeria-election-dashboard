@@ -286,7 +286,7 @@ export default function LivePage() {
           Recent scrape log
         </h2>
         {(!timeline || timeline.length === 0) && (
-          <div className="text-sm text-dim italic">Daemon hasn't logged anything yet.</div>
+          <div className="text-sm text-dim italic">Daemon hasn&apos;t logged anything yet.</div>
         )}
         <div className="rounded border border-dashboard-border overflow-x-auto">
           <table className="w-full text-xs">
