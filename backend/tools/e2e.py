@@ -20,8 +20,7 @@ import urllib.request
 from collections.abc import Callable
 from typing import Any
 
-
-DEFAULT_URL = "https://ng-election-dashboard-lkxwq.ondigitalocean.app"
+DEFAULT_URL = "https://elections.innoedgetech.com"
 URL = (sys.argv[1] if len(sys.argv) > 1 else os.environ.get("E2E_URL", DEFAULT_URL)).rstrip("/")
 
 results: list[tuple[str, str, str]] = []  # (status, name, detail)
