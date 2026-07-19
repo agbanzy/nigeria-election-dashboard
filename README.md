@@ -77,10 +77,11 @@ pip install -r requirements-dev.txt
 
 # Start Postgres locally (or set DATABASE_URL to a hosted one)
 docker run --rm -d --name elec-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:15
-export DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/postgres
+export DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/elections
 
 alembic upgrade head
 python -m app.seed
+python -m app.importer.loaders.seed_historical   # load curated historical results (dashboard is empty without this)
 gunicorn -w 2 -b 0.0.0.0:8080 app.wsgi:app
 
 # In another terminal
