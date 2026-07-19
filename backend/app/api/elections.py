@@ -174,8 +174,8 @@ def standings_by_lga(election_id: int):
             return jsonify({"election": _serialize_election(election), "by_lga": []})
 
         lgas = {
-            l.lga_id: l
-            for l in session.scalars(select(Lga).where(Lga.lga_id.in_(all_lga_ids)))
+            lga.lga_id: lga
+            for lga in session.scalars(select(Lga).where(Lga.lga_id.in_(all_lga_ids)))
         }
         party_ids: set[int] = set()
         for v in votes_by_lga.values():

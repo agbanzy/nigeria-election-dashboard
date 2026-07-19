@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from flask import Blueprint, Response
 
@@ -22,9 +22,9 @@ bp = Blueprint("live", __name__, url_prefix="/api/live")
 @bp.get("/events")
 def events():
     def gen():
-        yield f"event: connected\ndata: {json.dumps({'ts': datetime.now(timezone.utc).isoformat()})}\n\n"
+        yield f"event: connected\ndata: {json.dumps({'ts': datetime.now(UTC).isoformat()})}\n\n"
         while True:
             time.sleep(15)
-            yield f"event: heartbeat\ndata: {json.dumps({'ts': datetime.now(timezone.utc).isoformat()})}\n\n"
+            yield f"event: heartbeat\ndata: {json.dumps({'ts': datetime.now(UTC).isoformat()})}\n\n"
 
     return Response(gen(), mimetype="text/event-stream")

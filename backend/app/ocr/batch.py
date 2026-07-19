@@ -20,23 +20,19 @@ from __future__ import annotations
 
 import argparse
 import logging
-import time
 
 import requests
-from sqlalchemy import and_, select
+from sqlalchemy import select
 
 from app.config import Config
 from app.db import init_engine, session_scope
-from app.importer.normalizers import resolve_party
 from app.models import (
     Election,
-    ElectionResult,
     IngestionSource,
     PollingUnit,
     State,
     Ward,
 )
-from app.ocr.ec8a import parse_ec8a_image
 
 log = logging.getLogger(__name__)
 

@@ -17,7 +17,7 @@ from sqlalchemy import select
 from app.db import session_scope
 from app.importer.normalizers import resolve_party
 from app.importer.schemas import ImportSummary
-from app.models import Candidate, Election, IngestionSource, Lga, State
+from app.models import Candidate, IngestionSource, Lga, State
 from app.scraper.phases import ensure_election
 
 log = logging.getLogger(__name__)

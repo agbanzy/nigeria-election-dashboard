@@ -21,7 +21,6 @@ from app.importer.normalizers import resolve_party
 from app.importer.schemas import ImportSummary, ResultRow
 from app.models import (
     Candidate,
-    Election,
     ElectionResult,
     IngestionSource,
     Lga,

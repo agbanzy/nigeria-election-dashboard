@@ -10,7 +10,8 @@ from __future__ import annotations
 from collections import defaultdict
 
 from flask import Blueprint, jsonify, request
-from sqlalchemy import func, select, text as _text
+from sqlalchemy import func, select
+from sqlalchemy import text as _text
 
 from app.analysis.competitiveness import competitiveness_index
 from app.analysis.descriptive import margin_of_victory, turnout
@@ -429,9 +430,9 @@ def biggest_swings():
         swings = []
         all_parties: set[str] = set()
         for sc in all_states:
-            for blk in (a_data.get(sc, {}).get("parties") or {}).keys():
+            for blk in (a_data.get(sc, {}).get("parties") or {}):
                 all_parties.add(blk)
-            for blk in (b_data.get(sc, {}).get("parties") or {}).keys():
+            for blk in (b_data.get(sc, {}).get("parties") or {}):
                 all_parties.add(blk)
         for sc in all_states:
             a_blk = a_data.get(sc, {})

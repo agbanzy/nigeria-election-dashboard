@@ -11,7 +11,7 @@ We try CONCURRENTLY first and fall back on the specific error.
 from __future__ import annotations
 
 import logging
-from typing import Iterable
+from collections.abc import Iterable
 
 from sqlalchemy import text
 

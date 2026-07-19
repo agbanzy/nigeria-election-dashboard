@@ -17,7 +17,7 @@ import logging
 import signal
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.config import Config
 from app.db import init_engine, session_scope
@@ -74,7 +74,7 @@ def main() -> int:
 
 def _run_iteration(client: IrevClient, cfg: Config) -> int:
     global _last_header_sync
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Header discovery once per day, no matter what mode.
     if _last_header_sync is None or now - _last_header_sync > HEADER_REFRESH_INTERVAL:

@@ -7,14 +7,13 @@ The `Mode` returned by `decide_mode()` is consumed by `daemon.py` and exposed vi
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import ElectionCalendar
-
 
 Mode = Literal["live", "preflight", "idle"]
 
@@ -28,7 +27,7 @@ class WakeDecision:
 
 
 def upcoming_events(session: Session, *, limit: int = 10) -> list[ElectionCalendar]:
-    now = datetime.now(timezone.utc).date()
+    now = datetime.now(UTC).date()
     stmt = (
         select(ElectionCalendar)
         .where(ElectionCalendar.election_date >= now)
@@ -59,7 +58,7 @@ def decide_mode(
     preflight_window_hours: int = 6,
     live_trailing_days: int = 1,
 ) -> WakeDecision:
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     today = now.date()
 
     # LIVE — an election is live for the whole of its election day (and a
@@ -96,7 +95,7 @@ def decide_mode(
     # PREFLIGHT — an upcoming election within the preflight window before its date.
     upcoming = next_event(session)
     if upcoming is not None:
-        delta = datetime.combine(upcoming.election_date, datetime.min.time(), tzinfo=timezone.utc) - now
+        delta = datetime.combine(upcoming.election_date, datetime.min.time(), tzinfo=UTC) - now
         if 0 <= delta.total_seconds() <= preflight_window_hours * 3600:
             state_ids = frozenset({upcoming.state_id}) if upcoming.state_id else frozenset()
             return WakeDecision(
@@ -116,6 +115,6 @@ def decide_mode(
 def seconds_until(event: ElectionCalendar | None, *, now: datetime | None = None) -> int | None:
     if event is None:
         return None
-    now = now or datetime.now(timezone.utc)
-    target = datetime.combine(event.election_date, datetime.min.time(), tzinfo=timezone.utc)
+    now = now or datetime.now(UTC)
+    target = datetime.combine(event.election_date, datetime.min.time(), tzinfo=UTC)
     return max(0, int((target - now).total_seconds()))
