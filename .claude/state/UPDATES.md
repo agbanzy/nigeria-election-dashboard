@@ -1,5 +1,16 @@
 # UPDATES — append-only changelog (newest at top)
 
+## 2026-07-19 — audit remediation Sprint 1 shipped to PR #37 (fix/audit-2026-07-19-sprint1)
+- One PR remediating the safe majority of the 108-finding audit. 8 commits. Local gate GREEN: ruff clean tree-wide, 41 pytest (was 29; +12 new hardening tests) on real Postgres, frontend lint + prod build.
+- Security: fail-closed admin gate + hmac + **prod won't boot without ADMIN_TOKEN** (F-201/706); SSRF+bomb guard on /api/admin/ocr (F-202); flask-limiter on login+apply (F-203/703); CORS pin (F-204).
+- Reliability/DB: pool caps + 30s statement_timeout (F-409/313); semantic health + /api/health/scraper 503-when-stale (F-402); election_results FK indexes via migration 0008 (F-305).
+- Infra (spec, committed only — NOT yet applied): gthread workers (F-302/401), SCRAPER_BURST_FACTOR→1.0 (F-902). NOTE deploy_on_push uses the DO-STORED spec, so these need `doctl apps update --spec .do/app.yaml` to take effect.
+- CI: re-enabled workflow, eslint config, e2e→live domain, ruff sweep (F-604), mypy advisory pending ~115 pre-existing strict errors (F-605). **BLOCKED: GitHub Actions account is billing-locked** ("account is locked due to a billing issue") — jobs can't start, so no green check until billing is resolved (money matter, not touched).
+- Repo hygiene: dead root monolith deleted, 26MB db untracked, CONTEXT.md rewritten, /messaging route removed (F-802/805/801/811).
+- DEFERRED to a parity-tested follow-up (change displayed numbers / mutate shared prod election data): vote unique-constraint+dedupe+upsert (F-102/404), grain read filter (F-101), PU-scale GROUP BY rewrite (F-301).
+- PR: https://github.com/agbanzy/nigeria-election-dashboard/pull/37 — MERGEABLE, no branch protection. Merge auto-deploys CODE only (ADMIN_TOKEN verified present in live spec, so boot-guard is safe; migration 0008 is index-only).
+
+
 ## 2026-07-18 — free API by application — DEPLOYED + live-verified (ff2ce00)
 - Live gate confirmed on prod: keyless `/api/states` → 401 with apply/docs pointer; `Sec-Fetch-Site: same-origin` → 200 list; `/api/health` exempt → 200; `/api-access` page → 200; POST /api/developer/apply → 201 ref; status → pending with NO key leak.
 - NOT verified live: the actual approve→key issuance (ADMIN_TOKEN is encrypted in spec, admin-password login is a prohibited action for the agent, and direct apcng-db access is classifier-blocked). That path IS covered by tests/test_developer_api.py against real Postgres (apply→409-dupe→approve→keyed 200→revoke 401, all green).
