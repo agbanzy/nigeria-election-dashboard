@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import bcrypt
 import click
@@ -11,11 +11,13 @@ from sqlalchemy import select, update
 
 from app.db import session_scope
 from app.models import User
+from app.ratelimit import limiter
 
 bp = Blueprint("auth", __name__)
 
 
 @bp.post("/api/auth/login")
+@limiter.limit("10 per minute; 100 per hour")
 def login() -> tuple:
     body = request.get_json(silent=True) or {}
     email = (body.get("email") or "").strip().lower()
@@ -35,7 +37,7 @@ def login() -> tuple:
         session.execute(
             update(User)
             .where(User.user_id == user.user_id)
-            .values(last_login_at=datetime.now(timezone.utc))
+            .values(last_login_at=datetime.now(UTC))
         )
 
         return jsonify(

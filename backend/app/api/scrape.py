@@ -1,29 +1,20 @@
 """POST /api/scrape/trigger, GET /api/scrape/status — operator endpoints.
 
-These are intentionally minimal in Phase A. Phase B will add an admin header
-auth gate (`X-Admin-Token`) before any trigger reaches production.
+Write/operator actions are gated by `X-Admin-Token` via the shared fail-closed
+admin gate (see app.admin_auth).
 """
 
 from __future__ import annotations
 
-import os
-
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
 from sqlalchemy import select
 
+from app.admin_auth import require_admin as _require_admin
 from app.db import session_scope
 from app.models import ScrapeLog
 from app.scraper.calendar import decide_mode
 
 bp = Blueprint("scrape", __name__, url_prefix="/api/scrape")
-
-
-def _require_admin() -> bool:
-    expected = os.environ.get("ADMIN_TOKEN", "")
-    if not expected:
-        return True  # not configured; allow (Phase A only)
-    given = request.headers.get("X-Admin-Token", "")
-    return given == expected
 
 
 @bp.get("/status")
