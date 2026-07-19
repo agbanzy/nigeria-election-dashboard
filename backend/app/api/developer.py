@@ -21,6 +21,7 @@ from sqlalchemy import select
 
 from app.db import session_scope
 from app.models import ApiClient
+from app.ratelimit import limiter
 
 bp = Blueprint("developer", __name__, url_prefix="/api/developer")
 
@@ -37,6 +38,7 @@ def _new_key() -> str:
 
 
 @bp.post("/apply")
+@limiter.limit("5 per hour; 20 per day")
 def apply():
     body = request.get_json(silent=True) or {}
     name = (body.get("name") or "").strip()

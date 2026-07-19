@@ -20,12 +20,15 @@ choropleth + comparison populate automatically.
 
 from __future__ import annotations
 
-import os
+import ipaddress
+import socket
+from urllib.parse import urlsplit
 
 import requests
 from flask import Blueprint, jsonify, request
 from sqlalchemy import delete, func, select
 
+from app.admin_auth import require_admin as _require_admin
 from app.db import session_scope
 from app.importer.normalizers import resolve_party
 from app.models import Election, ElectionResult, Lga, State
@@ -38,17 +41,68 @@ MANUAL_SOURCE = "Manual admin entry"
 OCR_SOURCE = "OCR (EC8A)"
 IMPORT_SOURCE_PREFIX = "External import"
 VOTE_CEILING = 50_000_000  # generous per-party state-total guard
-
-
-def _require_admin() -> bool:
-    expected = os.environ.get("ADMIN_TOKEN", "")
-    if not expected:
-        return True  # not configured → allow (matches scrape.py Phase-A posture)
-    return request.headers.get("X-Admin-Token", "") == expected
+OCR_MAX_BYTES = 15 * 1024 * 1024  # cap remote EC8A downloads to 15 MB
 
 
 def _unauthorized():
     return jsonify({"error": "unauthorized"}), 401
+
+
+def _is_public_host(host: str) -> bool:
+    """True only if every resolved address for host is a public unicast IP.
+
+    Blocks SSRF into loopback / RFC1918 / link-local (incl. the 169.254.169.254
+    cloud metadata endpoint) / reserved ranges.
+    """
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except OSError:
+        return False
+    for info in infos:
+        ip_str = info[4][0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            return False
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            return False
+    return True
+
+
+def _fetch_remote_image(url: str) -> tuple[bytes | None, str | None]:
+    """Fetch a remote image with SSRF guards + a size cap.
+
+    Returns (content, None) on success or (None, error_message) on failure.
+    The error message is deliberately generic (no upstream detail) so the
+    endpoint can't be used as an SSRF/port-scan oracle.
+    """
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return None, "image_url must be an http(s) URL"
+    if not _is_public_host(parts.hostname):
+        return None, "image_url host is not allowed"
+    try:
+        resp = requests.get(
+            url, timeout=15, stream=True, headers={"User-Agent": "ned-ocr/1.0"}
+        )
+        resp.raise_for_status()
+        chunks: list[bytes] = []
+        total = 0
+        for chunk in resp.iter_content(chunk_size=64 * 1024):
+            total += len(chunk)
+            if total > OCR_MAX_BYTES:
+                return None, "image exceeds size limit"
+            chunks.append(chunk)
+        return b"".join(chunks), None
+    except requests.RequestException:
+        return None, "image fetch failed"
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -216,15 +270,16 @@ def ocr_ec8a():
     body = request.get_json(silent=True) or {}
     url = body.get("image_url")
     cycle = _as_int(body.get("cycle"))
-    if not url or not str(url).startswith("http"):
+    if not url:
         return jsonify({"error": "image_url required"}), 400
-    try:
-        resp = requests.get(str(url), timeout=30)
-        resp.raise_for_status()
-    except Exception as exc:  # noqa: BLE001
-        return jsonify({"error": f"image fetch failed: {exc}"}), 502
 
-    parsed = parse_ec8a_image(resp.content, cycle=cycle)
+    content, err = _fetch_remote_image(str(url))
+    if content is None:
+        # Generic message — never echo the upstream response/exception, which
+        # would turn this endpoint into an SSRF oracle for internal services.
+        return jsonify({"error": err or "image fetch failed"}), 502
+
+    parsed = parse_ec8a_image(content, cycle=cycle)
     if parsed is None:
         return jsonify(
             {
